@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use chrono::{Duration, Utc};
-use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, PreviewResult, Rule, ScanOptions};
+use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanOptions};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
@@ -60,6 +60,8 @@ fn execute(app: AppHandle, root: String, preview: PreviewResult) -> Result<Execu
 fn undo(app: AppHandle, journal_id: String) -> Result<ExecutionReport, String> {
     let id = uuid::Uuid::parse_str(&journal_id).map_err(|_| "Invalid journal identifier.".to_string())?;
     let path = journals_dir(&app)?.join(format!("{id}.journal.json"));
+    let journal = sortsmith_core::journal::load_journal(&path).map_err(|e| e.to_string())?;
+    validate_journal_paths(&journal)?;
     let report = undo_journal(&path).map_err(|e| e.to_string())?;
     append_operation_log(&app, "undo", report.journal.id, report.completed, report.errors.len());
     Ok(report)
@@ -111,6 +113,16 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
     state.recent_journal_ids.truncate(20);
     save_state(app, state)?;
     Ok(messages)
+}
+
+fn validate_journal_paths(journal: &OperationJournal) -> Result<(), String> {
+    let root = validated_root(&journal.root.to_string_lossy()).map_err(|_| "The journal root is unavailable or invalid.".to_string())?;
+    for entry in &journal.entries {
+        if !safe_operation_path(&root, &entry.to, true) || !safe_operation_path(&root, &entry.from, false) {
+            return Err("The undo journal contains a path outside its recorded root and was blocked.".into());
+        }
+    }
+    Ok(())
 }
 
 fn safe_operation_path(root: &Path, path: &Path, must_exist: bool) -> bool {
