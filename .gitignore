@@ -1,0 +1,32 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Tauri build output
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# IDE/OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Runtime/user data
+.sortsmith/
+*.journal.json
+*.log
+.env
+.env.*
+!.env.example
+
+# Misc
+*.tmp
