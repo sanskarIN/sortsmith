@@ -1,7 +1,7 @@
 use crate::error::io;
 use crate::journal::{load_journal, save_journal};
 use crate::models::*;
-use crate::rules::{destination_for, rule_matches};
+use crate::rules::{destination_for, rule_matches, validate_rule};
 use crate::safety::collision_safe_path;
 use crate::Result;
 use chrono::{DateTime, Utc};
@@ -11,6 +11,10 @@ use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
 pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) -> Result<PreviewResult> {
+    for rule in rules.iter().filter(|rule| rule.enabled) {
+        validate_rule(rule)?;
+    }
+
     let mut result = PreviewResult::default();
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
@@ -137,5 +141,14 @@ mod tests {
         let undo = undo_journal(&journal_path).unwrap();
         assert_eq!(undo.completed, 1);
         assert!(root.path().join("note.txt").exists());
+    }
+
+    #[test]
+    fn rejects_invalid_rules_before_scanning() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let mut invalid = txt_rule();
+        invalid.action = RuleAction::MoveTo { subdirectory: "../outside".into() };
+        assert!(preview_organization(root.path(), &[invalid], &ScanOptions::default()).is_err());
     }
 }
