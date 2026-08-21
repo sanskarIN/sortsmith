@@ -48,3 +48,100 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn entry(name: &str, size: u64) -> FileEntry {
+        let path = PathBuf::from(name);
+        FileEntry {
+            relative_path: path.clone(),
+            extension: path.extension().and_then(|value| value.to_str()).map(str::to_ascii_lowercase),
+            path,
+            size,
+            modified_at: None,
+            mime: Some("text/plain".into()),
+        }
+    }
+
+    fn rule(criteria: Vec<RuleCriterion>, action: RuleAction) -> Rule {
+        Rule {
+            id: Uuid::new_v4(),
+            name: "Test rule".into(),
+            enabled: true,
+            match_all: true,
+            criteria,
+            action,
+        }
+    }
+
+    #[test]
+    fn extension_matching_is_case_insensitive_and_accepts_dot_prefix() {
+        let file = entry("notes.txt", 10);
+        let candidate = rule(
+            vec![RuleCriterion::Extension { values: vec![".TXT".into()] }],
+            RuleAction::MoveTo { subdirectory: "Documents".into() },
+        );
+        assert!(rule_matches(&candidate, &file).unwrap());
+    }
+
+    #[test]
+    fn match_all_requires_every_criterion() {
+        let file = entry("notes.txt", 10);
+        let candidate = rule(
+            vec![
+                RuleCriterion::Extension { values: vec!["txt".into()] },
+                RuleCriterion::SizeRange { min_bytes: Some(20), max_bytes: None },
+            ],
+            RuleAction::MoveTo { subdirectory: "Documents".into() },
+        );
+        assert!(!rule_matches(&candidate, &file).unwrap());
+    }
+
+    #[test]
+    fn match_any_accepts_one_matching_criterion() {
+        let file = entry("notes.txt", 10);
+        let mut candidate = rule(
+            vec![
+                RuleCriterion::Extension { values: vec!["txt".into()] },
+                RuleCriterion::SizeRange { min_bytes: Some(20), max_bytes: None },
+            ],
+            RuleAction::MoveTo { subdirectory: "Documents".into() },
+        );
+        candidate.match_all = false;
+        assert!(rule_matches(&candidate, &file).unwrap());
+    }
+
+    #[test]
+    fn invalid_regex_is_reported_as_an_invalid_rule() {
+        let file = entry("notes.txt", 10);
+        let candidate = rule(
+            vec![RuleCriterion::NameRegex { pattern: "[unterminated".into() }],
+            RuleAction::MoveTo { subdirectory: "Documents".into() },
+        );
+        assert!(matches!(rule_matches(&candidate, &file), Err(SortSmithError::InvalidRule(_))));
+    }
+
+    #[test]
+    fn rename_template_rejects_parent_escape() {
+        let file = entry("notes.txt", 10);
+        let candidate = rule(
+            vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
+            RuleAction::RenameTemplate { template: "../{name}".into() },
+        );
+        assert!(matches!(destination_for(Path::new("."), &file, &candidate), Err(SortSmithError::InvalidRule(_))));
+    }
+
+    #[test]
+    fn rename_template_preserves_extension_when_not_in_template() {
+        let file = entry("notes.txt", 10);
+        let candidate = rule(
+            vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
+            RuleAction::RenameTemplate { template: "sorted-{name}".into() },
+        );
+        let destination = destination_for(Path::new("."), &file, &candidate).unwrap();
+        assert_eq!(destination, PathBuf::from("sorted-notes.txt"));
+    }
+}
