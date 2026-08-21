@@ -117,7 +117,6 @@ fn safe_operation_path(root: &Path, path: &Path, must_exist: bool) -> bool {
         return false;
     }
 
-    // Existing parent components must not redirect through a symlink outside the selected root.
     let mut current = root.to_path_buf();
     if let Some(parent) = relative.parent() {
         for component in parent.components() {
@@ -165,6 +164,7 @@ fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![load_state, save_state, preview, execute, undo, find_duplicate_candidates, export_state, import_state, run_due_watches])
         .run(tauri::generate_context!())
         .expect("error while running SortSmith");
