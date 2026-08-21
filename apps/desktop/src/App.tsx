@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { backend } from "./api";
 import { chooseFolder } from "./dialogs";
+import { HistoryPage } from "./HistoryPage";
 import { strings } from "./i18n";
 import { SettingsDataTools } from "./SettingsDataTools";
 import type { AppStateData, DuplicateGroup, PreviewResult, Rule } from "./types";
 import { formatBytes, shortPath } from "./utils";
 
-type Page = "organize" | "rules" | "duplicates" | "automation" | "settings" | "about";
+type Page = "organize" | "rules" | "duplicates" | "automation" | "history" | "settings" | "about";
 
 const fallbackState: AppStateData = {
   schemaVersion: 1,
@@ -103,7 +104,7 @@ function App() {
   return <div className="app-shell">
     <aside className="sidebar" aria-label="Main navigation">
       <div className="brand"><div className="brand-mark" aria-hidden="true">S</div><div><strong>SortSmith</strong><span>File Organizer</span></div></div>
-      <nav>{(["organize","rules","duplicates","automation","settings","about"] as Page[]).map(item => <button key={item} className={page===item?"active":""} onClick={()=>setPage(item)}>{item[0].toUpperCase()+item.slice(1)}</button>)}</nav>
+      <nav>{(["organize","rules","duplicates","automation","history","settings","about"] as Page[]).map(item => <button key={item} className={page===item?"active":""} onClick={()=>setPage(item)}>{item[0].toUpperCase()+item.slice(1)}</button>)}</nav>
       <div className="sidebar-footer"><span className="privacy-dot"/>Offline-first & private</div>
     </aside>
 
@@ -113,6 +114,7 @@ function App() {
       {page === "rules" && <RulesPage state={state} persist={persist} />}
       {page === "duplicates" && <DuplicatesPage rootPath={rootPath} setRootPath={setRootPath} groups={duplicates} onChooseFolder={pickRootFolder} onScan={scanDuplicates} busy={busy}/>} 
       {page === "automation" && <AutomationPage state={state} persist={persist} />}
+      {page === "history" && <HistoryPage state={state} persist={persist} />}
       {page === "settings" && <SettingsPage state={state} persist={persist} />}
       {page === "about" && <AboutPage />}
       <footer>{strings.madeBy}</footer>
@@ -120,7 +122,7 @@ function App() {
   </div>;
 }
 
-function titleFor(page: Page) { return ({ organize:"Organize safely", rules:"Rules & presets", duplicates:"Duplicate candidates", automation:"Watched folders", settings:"Settings", about:"About SortSmith" } as const)[page]; }
+function titleFor(page: Page) { return ({ organize:"Organize safely", rules:"Rules & presets", duplicates:"Duplicate candidates", automation:"Watched folders", history:"Undo history", settings:"Settings", about:"About SortSmith" } as const)[page]; }
 
 function Organize({rootPath,setRootPath,preview,busy,onChooseFolder,onPreview,onApply,onUndo,canUndo}:{rootPath:string;setRootPath:(v:string)=>void;preview:PreviewResult|null;busy:boolean;onChooseFolder:()=>void;onPreview:()=>void;onApply:()=>void;onUndo:()=>void;canUndo:boolean}) {
   return <section className="stack">
