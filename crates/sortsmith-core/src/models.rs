@@ -20,7 +20,12 @@ pub enum RuleCriterion {
     Extension { values: Vec<String> },
     MimePrefix { values: Vec<String> },
     ModifiedOlderThanDays { days: u32 },
-    SizeRange { min_bytes: Option<u64>, max_bytes: Option<u64> },
+    SizeRange {
+        #[serde(rename = "minBytes", alias = "min_bytes")]
+        min_bytes: Option<u64>,
+        #[serde(rename = "maxBytes", alias = "max_bytes")]
+        max_bytes: Option<u64>,
+    },
     NameRegex { pattern: String },
 }
 
@@ -194,5 +199,30 @@ fn extension_rule(name: &str, values: &[&str], subdirectory: &str) -> Rule {
         match_all: true,
         criteria: vec![RuleCriterion::Extension { values: values.iter().map(|v| (*v).to_string()).collect() }],
         action: RuleAction::MoveTo { subdirectory: subdirectory.into() },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn size_range_uses_frontend_camel_case_keys() {
+        let criterion = RuleCriterion::SizeRange { min_bytes: Some(1_024), max_bytes: Some(2_048) };
+        let json = serde_json::to_value(&criterion).unwrap();
+        assert_eq!(json["kind"], "sizeRange");
+        assert_eq!(json["minBytes"], 1_024);
+        assert_eq!(json["maxBytes"], 2_048);
+        assert!(json.get("min_bytes").is_none());
+    }
+
+    #[test]
+    fn size_range_reads_legacy_snake_case_keys() {
+        let criterion: RuleCriterion = serde_json::from_value(serde_json::json!({
+            "kind": "sizeRange",
+            "min_bytes": 10,
+            "max_bytes": 20
+        })).unwrap();
+        assert_eq!(criterion, RuleCriterion::SizeRange { min_bytes: Some(10), max_bytes: Some(20) });
     }
 }
