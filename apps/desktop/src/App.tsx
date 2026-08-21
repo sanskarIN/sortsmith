@@ -3,8 +3,9 @@ import { backend } from "./api";
 import { chooseFolder } from "./dialogs";
 import { HistoryPage } from "./HistoryPage";
 import { strings } from "./i18n";
+import { RulesPage } from "./RulesPage";
 import { SettingsDataTools } from "./SettingsDataTools";
-import type { AppStateData, DuplicateGroup, PreviewResult, Rule } from "./types";
+import type { AppStateData, DuplicateGroup, PreviewResult } from "./types";
 import { formatBytes, shortPath } from "./utils";
 
 type Page = "organize" | "rules" | "duplicates" | "automation" | "history" | "settings" | "about";
@@ -134,16 +135,6 @@ function Organize({rootPath,setRootPath,preview,busy,onChooseFolder,onPreview,on
     </div>
   </section>;
 }
-
-function RulesPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<void>}) {
-  const [name,setName]=useState(""); const [extensions,setExtensions]=useState(""); const [folder,setFolder]=useState("");
-  const addRule=async()=>{ if(!name.trim()||!extensions.trim()||!folder.trim())return; const rule:Rule={id:crypto.randomUUID(),name:name.trim(),enabled:true,matchAll:true,criteria:[{kind:"extension",values:extensions.split(",").map(v=>v.trim().replace(/^\./,"" )).filter(Boolean)}],action:{kind:"moveTo",subdirectory:folder.trim()}}; await persist({...state,rules:[...state.rules,rule]}); setName("");setExtensions("");setFolder(""); };
-  const effective=state.rules.length?state.rules:state.presets[0]?.rules??[];
-  return <section className="stack"><div className="panel"><h3>Create an extension rule</h3><div className="form-grid"><label>Name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Screenshots"/></label><label>Extensions<input value={extensions} onChange={e=>setExtensions(e.target.value)} placeholder="png, jpg, webp"/></label><label>Destination folder<input value={folder} onChange={e=>setFolder(e.target.value)} placeholder="Images/Screenshots"/></label></div><button className="primary" onClick={addRule}>Add rule</button></div>
-    <div className="panel"><div className="panel-head"><div><h3>Active rules</h3><p>{state.rules.length?"Your custom rule set":"Using the built-in Everyday tidy preset"}</p></div>{state.rules.length>0&&<button onClick={()=>persist({...state,rules:[]})}>Use default preset</button>}</div><div className="cards">{effective.map(rule=><article className="rule-card" key={rule.id}><div><span className="pill">{rule.enabled?"Enabled":"Disabled"}</span><h4>{rule.name}</h4><p>{describeRule(rule)}</p></div>{state.rules.length>0&&<button aria-label={`Remove ${rule.name}`} onClick={()=>persist({...state,rules:state.rules.filter(r=>r.id!==rule.id)})}>Remove</button>}</article>)}</div></div></section>;
-}
-
-function describeRule(rule:Rule){ const c=rule.criteria[0]; if(c?.kind==="extension") return `Extensions: ${c.values.join(", ")} → ${rule.action.kind==="moveTo"?rule.action.subdirectory:"rename"}`; return `${rule.criteria.length} criterion/criteria`; }
 
 function DuplicatesPage({rootPath,setRootPath,groups,onChooseFolder,onScan,busy}:{rootPath:string;setRootPath:(v:string)=>void;groups:DuplicateGroup[];onChooseFolder:()=>void;onScan:()=>void;busy:boolean}) { return <section className="stack"><div className="panel"><label htmlFor="dup-folder">Folder to inspect</label><div className="input-row"><input id="dup-folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="Choose a folder or paste its path"/><button onClick={onChooseFolder} disabled={busy}>Choose folder</button><button className="primary" onClick={onScan} disabled={busy}>Find candidates</button></div><p className="hint">Uses BLAKE3 hashes after a size pre-filter. SortSmith reports duplicates but never auto-deletes them.</p></div><div className="panel">{groups.length===0?<Empty icon="≈" title="No duplicate groups shown" text="Start a scan to compare file content safely."/>:<div className="cards">{groups.map(g=><article className="dup-card" key={g.hash}><div className="panel-head"><strong>{g.files.length} identical files</strong><span>{formatBytes(g.size)} each</span></div>{g.files.map(f=><code key={f.path}>{f.path}</code>)}</article>)}</div>}</div></section>; }
 
