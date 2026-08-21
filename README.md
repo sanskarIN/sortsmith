@@ -10,9 +10,11 @@
 
 SortSmith is an offline-first desktop file organizer built with **Rust + Tauri + React**. It previews changes before touching the filesystem, records reversible operation journals, detects duplicate candidates by content hash without deleting them, and can run user-controlled watched-folder rules while the app is open.
 
+> **Development status:** the `0.1.0` implementation baseline is in place. Do not treat it as a published release until the repository's cross-platform CI, clean installer smoke tests, and release checklist are green.
+
 ## Screenshots
 
-Real release screenshots will be captured from signed release builds. Placeholder policy and capture requirements live in [`docs/screenshots/README.md`](docs/screenshots/README.md). Until then, the UI is reproducible from source with the development commands below.
+Real release screenshots will be captured from verified release builds. Placeholder policy and capture requirements live in [`docs/screenshots/README.md`](docs/screenshots/README.md). Until then, the UI is reproducible from source with the development commands below.
 
 ## Features
 
