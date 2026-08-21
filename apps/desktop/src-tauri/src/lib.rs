@@ -6,6 +6,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
+const MAX_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| format!("Could not resolve app data directory: {e}"))
 }
@@ -71,14 +73,18 @@ fn find_duplicate_candidates(root: String, recursive: bool, include_hidden: bool
 
 #[tauri::command]
 fn export_state(path: String, state: AppStateData) -> Result<(), String> {
-    let target = PathBuf::from(path);
+    if state.schema_version != 1 { return Err("Unsupported settings schema version.".into()); }
+    let target = validated_json_export_path(&path)?;
     atomic_json_write(&target, &state)
 }
 
 #[tauri::command]
 fn import_state(path: String) -> Result<AppStateData, String> {
-    let bytes = fs::read(&path).map_err(|e| format!("Could not read import file: {e}"))?;
-    let state: AppStateData = serde_json::from_slice(&bytes).map_err(|e| format!("Import file is invalid: {e}"))?;
+    let source = validated_json_import_path(&path)?;
+    let metadata = fs::metadata(&source).map_err(|_| "Could not inspect the selected import file.".to_string())?;
+    if metadata.len() > MAX_IMPORT_BYTES { return Err("The selected settings file is too large to be a SortSmith export.".into()); }
+    let bytes = fs::read(&source).map_err(|_| "Could not read the selected import file.".to_string())?;
+    let state: AppStateData = serde_json::from_slice(&bytes).map_err(|_| "The selected file is not a valid SortSmith settings export.".to_string())?;
     if state.schema_version != 1 { return Err("Unsupported import schema version.".into()); }
     Ok(state)
 }
@@ -151,6 +157,40 @@ fn validated_root(raw: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw.trim());
     if raw.trim().is_empty() || !path.exists() || !path.is_dir() { return Err("Choose an existing folder.".into()); }
     path.canonicalize().map_err(|e| format!("Could not resolve the selected folder: {e}"))
+}
+
+fn has_json_extension(path: &Path) -> bool {
+    path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("json"))
+}
+
+fn validated_json_import_path(raw: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(raw.trim());
+    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) {
+        return Err("Choose an absolute .json settings file.".into());
+    }
+    let link_metadata = fs::symlink_metadata(&path).map_err(|_| "The selected import file is unavailable.".to_string())?;
+    if link_metadata.file_type().is_symlink() || !link_metadata.is_file() {
+        return Err("The selected import must be a regular JSON file, not a link or directory.".into());
+    }
+    path.canonicalize().map_err(|_| "Could not resolve the selected import file.".to_string())
+}
+
+fn validated_json_export_path(raw: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(raw.trim());
+    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) {
+        return Err("Choose an absolute .json export path.".into());
+    }
+    if path.exists() {
+        let metadata = fs::symlink_metadata(&path).map_err(|_| "Could not inspect the selected export path.".to_string())?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("The export target must be a regular JSON file.".into());
+        }
+    }
+    let parent = path.parent().ok_or_else(|| "The selected export path has no parent directory.".to_string())?;
+    let parent = parent.canonicalize().map_err(|_| "The selected export directory is unavailable.".to_string())?;
+    if !parent.is_dir() { return Err("The selected export directory is invalid.".into()); }
+    let filename = path.file_name().ok_or_else(|| "The selected export filename is invalid.".to_string())?;
+    Ok(parent.join(filename))
 }
 
 fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), String> {
