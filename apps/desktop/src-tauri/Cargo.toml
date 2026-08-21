@@ -1,0 +1,21 @@
+[package]
+name = "sortsmith"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "sortsmith_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sortsmith-core = { path = "../../../crates/sortsmith-core" }
+tauri = { version = "2.11.5", features = [] }
+uuid.workspace = true
