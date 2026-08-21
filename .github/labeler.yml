@@ -1,0 +1,12 @@
+core:
+  - changed-files:
+      - any-glob-to-any-file: "crates/sortsmith-core/**"
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: "apps/desktop/src/**"
+desktop:
+  - changed-files:
+      - any-glob-to-any-file: "apps/desktop/src-tauri/**"
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "*.md"]
