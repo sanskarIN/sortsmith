@@ -194,11 +194,35 @@ fn validated_json_export_path(raw: &str) -> Result<PathBuf, String> {
 }
 
 fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), String> {
-    if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("Could not create data directory: {e}"))?; }
-    let temp = path.with_extension("json.tmp");
+    let parent = path.parent().ok_or_else(|| "The data path has no parent directory.".to_string())?;
+    fs::create_dir_all(parent).map_err(|e| format!("Could not create data directory: {e}"))?;
+    let filename = path.file_name().and_then(|value| value.to_str()).unwrap_or("sortsmith.json");
+    let nonce = uuid::Uuid::new_v4();
+    let temp = parent.join(format!(".{filename}.{nonce}.tmp"));
+    let backup = parent.join(format!(".{filename}.{nonce}.bak"));
     let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
     fs::write(&temp, bytes).map_err(|e| format!("Could not write data: {e}"))?;
-    fs::rename(&temp, path).map_err(|e| format!("Could not finalize data file: {e}"))
+
+    if !path.exists() {
+        return fs::rename(&temp, path).map_err(|e| format!("Could not finalize data file: {e}"));
+    }
+
+    fs::rename(path, &backup).map_err(|e| {
+        let _ = fs::remove_file(&temp);
+        format!("Could not prepare the existing data file for replacement: {e}")
+    })?;
+
+    match fs::rename(&temp, path) {
+        Ok(()) => {
+            let _ = fs::remove_file(&backup);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = fs::rename(&backup, path);
+            let _ = fs::remove_file(&temp);
+            Err(format!("Could not finalize data file: {error}"))
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
