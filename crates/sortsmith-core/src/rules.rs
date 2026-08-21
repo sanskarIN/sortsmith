@@ -34,7 +34,7 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
             let stem = file.path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
             let ext = file.extension.as_deref().unwrap_or("");
             let mut rendered = template.replace("{name}", stem).replace("{ext}", ext);
-            if rendered.contains(['/', '\\']) || rendered.contains("..") {
+            if rendered.contains('/') || rendered.contains('\\') || rendered.contains("..") {
                 return Err(SortSmithError::InvalidRule("rename template cannot contain path separators or '..'".into()));
             }
             if rendered.trim().is_empty() {
