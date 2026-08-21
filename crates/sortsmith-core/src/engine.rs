@@ -1,7 +1,7 @@
 use crate::error::io;
 use crate::journal::{load_journal, save_journal};
 use crate::models::*;
-use crate::rules::{destination_for, rule_matches, validate_rule};
+use crate::rules::{destination_for, PreparedRule};
 use crate::safety::collision_safe_path;
 use crate::Result;
 use chrono::{DateTime, Utc};
@@ -11,10 +11,7 @@ use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
 pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) -> Result<PreviewResult> {
-    for rule in rules.iter().filter(|rule| rule.enabled) {
-        validate_rule(rule)?;
-    }
-
+    let prepared_rules = rules.iter().filter(|rule| rule.enabled).map(PreparedRule::new).collect::<Result<Vec<_>>>()?;
     let mut result = PreviewResult::default();
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
@@ -30,8 +27,9 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
             Err(err) => { result.recoverable_errors.push(err.to_string()); continue; }
         };
         let mut planned = false;
-        for rule in rules.iter().filter(|r| r.enabled) {
-            if rule_matches(rule, &file)? {
+        for prepared in &prepared_rules {
+            if prepared.matches(&file) {
+                let rule = prepared.rule();
                 let destination = collision_safe_path(&destination_for(root, &file, rule)?);
                 if destination != file.path {
                     result.operations.push(PlannedOperation { id: Uuid::new_v4(), source: file.path.clone(), destination, rule_id: rule.id, rule_name: rule.name.clone(), size: file.size });
