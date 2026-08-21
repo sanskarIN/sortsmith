@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { backend } from "./api";
+import { chooseFolder } from "./dialogs";
 import { strings } from "./i18n";
 import type { AppStateData, DuplicateGroup, PreviewResult, Rule } from "./types";
 import { formatBytes, shortPath } from "./utils";
@@ -42,8 +43,21 @@ function App() {
     try { await backend.saveState(next); } catch { setMessage("Your setting changed for this session, but could not be saved."); }
   }
 
+  async function pickRootFolder() {
+    try {
+      const selected = await chooseFolder(rootPath);
+      if (!selected) return;
+      setRootPath(selected);
+      setPreview(null);
+      setDuplicates([]);
+      setMessage("Folder selected. Run a preview before applying any changes.");
+    } catch (error) {
+      setMessage(`Folder picker failed: ${String(error)}`);
+    }
+  }
+
   async function runPreview() {
-    if (!rootPath.trim()) { setMessage("Choose a folder path first."); return; }
+    if (!rootPath.trim()) { setMessage("Choose a folder first."); return; }
     setBusy(true); setMessage("Scanning metadata and evaluating rules…");
     try {
       const result = await backend.preview(rootPath.trim(), activeRules, state.settings.recursiveScan, state.settings.includeHidden);
@@ -78,7 +92,7 @@ function App() {
   }
 
   async function scanDuplicates() {
-    if (!rootPath.trim()) { setMessage("Choose a folder path first."); return; }
+    if (!rootPath.trim()) { setMessage("Choose a folder first."); return; }
     setBusy(true);
     try { const groups = await backend.duplicates(rootPath.trim(), true, state.settings.includeHidden); setDuplicates(groups); setMessage(`Found ${groups.length} duplicate group(s). Nothing was deleted.`); }
     catch (error) { setMessage(`Duplicate scan failed: ${String(error)}`); }
@@ -94,9 +108,9 @@ function App() {
 
     <main className="content">
       <header className="topbar"><div><p className="eyebrow">{strings.appName}</p><h1>{titleFor(page)}</h1></div><div className="status" role="status" aria-live="polite">{busy ? "Working…" : message}</div></header>
-      {page === "organize" && <Organize rootPath={rootPath} setRootPath={setRootPath} preview={preview} busy={busy} onPreview={runPreview} onApply={applyPreview} onUndo={undoLatest} canUndo={state.recentJournalIds.length>0} />}
+      {page === "organize" && <Organize rootPath={rootPath} setRootPath={setRootPath} preview={preview} busy={busy} onChooseFolder={pickRootFolder} onPreview={runPreview} onApply={applyPreview} onUndo={undoLatest} canUndo={state.recentJournalIds.length>0} />}
       {page === "rules" && <RulesPage state={state} persist={persist} />}
-      {page === "duplicates" && <DuplicatesPage rootPath={rootPath} setRootPath={setRootPath} groups={duplicates} onScan={scanDuplicates} busy={busy}/>} 
+      {page === "duplicates" && <DuplicatesPage rootPath={rootPath} setRootPath={setRootPath} groups={duplicates} onChooseFolder={pickRootFolder} onScan={scanDuplicates} busy={busy}/>} 
       {page === "automation" && <AutomationPage state={state} persist={persist} />}
       {page === "settings" && <SettingsPage state={state} persist={persist} />}
       {page === "about" && <AboutPage />}
@@ -107,10 +121,10 @@ function App() {
 
 function titleFor(page: Page) { return ({ organize:"Organize safely", rules:"Rules & presets", duplicates:"Duplicate candidates", automation:"Watched folders", settings:"Settings", about:"About SortSmith" } as const)[page]; }
 
-function Organize({rootPath,setRootPath,preview,busy,onPreview,onApply,onUndo,canUndo}:{rootPath:string;setRootPath:(v:string)=>void;preview:PreviewResult|null;busy:boolean;onPreview:()=>void;onApply:()=>void;onUndo:()=>void;canUndo:boolean}) {
+function Organize({rootPath,setRootPath,preview,busy,onChooseFolder,onPreview,onApply,onUndo,canUndo}:{rootPath:string;setRootPath:(v:string)=>void;preview:PreviewResult|null;busy:boolean;onChooseFolder:()=>void;onPreview:()=>void;onApply:()=>void;onUndo:()=>void;canUndo:boolean}) {
   return <section className="stack">
     <div className="hero-card"><div><p className="eyebrow">Dry run first. Always.</p><h2>{strings.tagline}</h2><p>SortSmith evaluates file metadata locally, shows every planned move, and records a reversible journal when you apply.</p></div><div className="shield">↺</div></div>
-    <div className="panel"><label htmlFor="folder">Folder to organize</label><div className="input-row"><input id="folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="/Users/you/Downloads or C:\\Users\\you\\Downloads"/><button className="primary" onClick={onPreview} disabled={busy}>{strings.dryRun}</button></div><p className="hint">Tip: paste a folder path. SortSmith never uploads file contents.</p></div>
+    <div className="panel"><label htmlFor="folder">Folder to organize</label><div className="input-row"><input id="folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="Choose a folder or paste its path"/><button onClick={onChooseFolder} disabled={busy}>Choose folder</button><button className="primary" onClick={onPreview} disabled={busy}>{strings.dryRun}</button></div><p className="hint">The native picker grants only the folder you choose. SortSmith never uploads file contents.</p></div>
     <div className="stats-grid"><Stat label="Scanned" value={preview?.scannedFiles ?? 0}/><Stat label="Planned changes" value={preview?.operations.length ?? 0}/><Stat label="Untouched" value={preview?.ignoredFiles ?? 0}/><Stat label="Recoverable issues" value={preview?.recoverableErrors.length ?? 0}/></div>
     <div className="panel"><div className="panel-head"><div><h3>Change preview</h3><p>Review source → destination before applying.</p></div><div className="actions"><button onClick={onUndo} disabled={!canUndo||busy}>Undo latest</button><button className="primary" onClick={onApply} disabled={!preview?.operations.length||busy}>{strings.apply}</button></div></div>
       {!preview?.operations.length ? <Empty icon="✓" title="Nothing queued" text="Run a preview to see exactly what SortSmith would change."/> : <div className="table-wrap"><table><thead><tr><th>Rule</th><th>Source</th><th>Destination</th><th>Size</th></tr></thead><tbody>{preview.operations.map(op=><tr key={op.id}><td><span className="pill">{op.ruleName}</span></td><td title={op.source}>{shortPath(op.source)}</td><td title={op.destination}>{shortPath(op.destination)}</td><td>{formatBytes(op.size)}</td></tr>)}</tbody></table></div>}
@@ -128,9 +142,9 @@ function RulesPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=
 
 function describeRule(rule:Rule){ const c=rule.criteria[0]; if(c?.kind==="extension") return `Extensions: ${c.values.join(", ")} → ${rule.action.kind==="moveTo"?rule.action.subdirectory:"rename"}`; return `${rule.criteria.length} criterion/criteria`; }
 
-function DuplicatesPage({rootPath,setRootPath,groups,onScan,busy}:{rootPath:string;setRootPath:(v:string)=>void;groups:DuplicateGroup[];onScan:()=>void;busy:boolean}) { return <section className="stack"><div className="panel"><label htmlFor="dup-folder">Folder to inspect</label><div className="input-row"><input id="dup-folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="Folder path"/><button className="primary" onClick={onScan} disabled={busy}>Find candidates</button></div><p className="hint">Uses BLAKE3 hashes after a size pre-filter. SortSmith reports duplicates but never auto-deletes them.</p></div><div className="panel">{groups.length===0?<Empty icon="≈" title="No duplicate groups shown" text="Start a scan to compare file content safely."/>:<div className="cards">{groups.map(g=><article className="dup-card" key={g.hash}><div className="panel-head"><strong>{g.files.length} identical files</strong><span>{formatBytes(g.size)} each</span></div>{g.files.map(f=><code key={f.path}>{f.path}</code>)}</article>)}</div>}</div></section>; }
+function DuplicatesPage({rootPath,setRootPath,groups,onChooseFolder,onScan,busy}:{rootPath:string;setRootPath:(v:string)=>void;groups:DuplicateGroup[];onChooseFolder:()=>void;onScan:()=>void;busy:boolean}) { return <section className="stack"><div className="panel"><label htmlFor="dup-folder">Folder to inspect</label><div className="input-row"><input id="dup-folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="Choose a folder or paste its path"/><button onClick={onChooseFolder} disabled={busy}>Choose folder</button><button className="primary" onClick={onScan} disabled={busy}>Find candidates</button></div><p className="hint">Uses BLAKE3 hashes after a size pre-filter. SortSmith reports duplicates but never auto-deletes them.</p></div><div className="panel">{groups.length===0?<Empty icon="≈" title="No duplicate groups shown" text="Start a scan to compare file content safely."/>:<div className="cards">{groups.map(g=><article className="dup-card" key={g.hash}><div className="panel-head"><strong>{g.files.length} identical files</strong><span>{formatBytes(g.size)} each</span></div>{g.files.map(f=><code key={f.path}>{f.path}</code>)}</article>)}</div>}</div></section>; }
 
-function AutomationPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<void>}) { const [path,setPath]=useState(""); const [interval,setIntervalValue]=useState(60); const add=()=>{if(!path.trim())return; persist({...state,watchedFolders:[...state.watchedFolders,{id:crypto.randomUUID(),path:path.trim(),presetId:state.presets[0]?.id,intervalMinutes:Math.max(5,interval),enabled:true,lastRunAt:null}]});setPath("");}; return <section className="stack"><div className="panel"><h3>Add watched folder</h3><div className="input-row"><input value={path} onChange={e=>setPath(e.target.value)} placeholder="Folder path"/><input className="small-input" type="number" min={5} value={interval} onChange={e=>setIntervalValue(Number(e.target.value))} aria-label="Interval minutes"/><button className="primary" onClick={add}>Add watch</button></div><p className="hint">Automation runs only while SortSmith is open. Each run creates the same reversible journal as a manual apply.</p></div><div className="panel">{state.watchedFolders.length===0?<Empty icon="⏱" title="No watched folders" text="Add a folder and choose how often SortSmith should organize it while the app is open."/>:<div className="cards">{state.watchedFolders.map(w=><article className="rule-card" key={w.id}><div><span className="pill">Every {w.intervalMinutes} min</span><h4>{w.path}</h4><p>Last run: {w.lastRunAt?new Date(w.lastRunAt).toLocaleString():"Never"}</p></div><button onClick={()=>persist({...state,watchedFolders:state.watchedFolders.filter(x=>x.id!==w.id)})}>Remove</button></article>)}</div>}</div></section>; }
+function AutomationPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<void>}) { const [path,setPath]=useState(""); const [interval,setIntervalValue]=useState(60); const add=()=>{if(!path.trim())return; persist({...state,watchedFolders:[...state.watchedFolders,{id:crypto.randomUUID(),path:path.trim(),presetId:state.presets[0]?.id,intervalMinutes:Math.max(5,interval),enabled:true,lastRunAt:null}]});setPath("");}; const choose=async()=>{try{const selected=await chooseFolder(path);if(selected)setPath(selected);}catch{return;}}; return <section className="stack"><div className="panel"><h3>Add watched folder</h3><div className="input-row"><input value={path} onChange={e=>setPath(e.target.value)} placeholder="Choose a folder or paste its path"/><button onClick={choose}>Choose folder</button><input className="small-input" type="number" min={5} value={interval} onChange={e=>setIntervalValue(Number(e.target.value))} aria-label="Interval minutes"/><button className="primary" onClick={add}>Add watch</button></div><p className="hint">Automation runs only while SortSmith is open. Each run creates the same reversible journal as a manual apply.</p></div><div className="panel">{state.watchedFolders.length===0?<Empty icon="⏱" title="No watched folders" text="Add a folder and choose how often SortSmith should organize it while the app is open."/>:<div className="cards">{state.watchedFolders.map(w=><article className="rule-card" key={w.id}><div><span className="pill">Every {w.intervalMinutes} min</span><h4>{w.path}</h4><p>Last run: {w.lastRunAt?new Date(w.lastRunAt).toLocaleString():"Never"}</p></div><button onClick={()=>persist({...state,watchedFolders:state.watchedFolders.filter(x=>x.id!==w.id)})}>Remove</button></article>)}</div>}</div></section>; }
 
 function SettingsPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<void>}) { const s=state.settings; const set=(patch:Partial<typeof s>)=>persist({...state,settings:{...s,...patch}}); return <section className="stack"><div className="panel settings"><h3>Appearance</h3><label>Theme<select value={s.theme} onChange={e=>set({theme:e.target.value as typeof s.theme})}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><Switch label="Reduce motion" checked={s.reducedMotion} onChange={v=>set({reducedMotion:v})}/></div><div className="panel settings"><h3>Organization</h3><Switch label="Confirm before applying changes" checked={s.confirmBeforeApply} onChange={v=>set({confirmBeforeApply:v})}/><Switch label="Scan subfolders" checked={s.recursiveScan} onChange={v=>set({recursiveScan:v})}/><Switch label="Include hidden files" checked={s.includeHidden} onChange={v=>set({includeHidden:v})}/></div><div className="panel"><h3>Privacy & data</h3><p>SortSmith works locally. It does not send filenames or file contents to a server. Operation journals contain paths needed for undo and stay in the app data directory.</p></div></section>; }
 
