@@ -2,11 +2,17 @@
 
 use chrono::{DateTime, Duration, Utc};
 use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanOptions};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 const MAX_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_CUSTOM_RULES: usize = 500;
+const MAX_PRESETS: usize = 50;
+const MAX_RULES_PER_PRESET: usize = 500;
+const MAX_WATCHED_FOLDERS: usize = 100;
+const MAX_RECENT_JOURNALS: usize = 100;
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,13 +41,13 @@ fn load_state(app: AppHandle) -> Result<AppStateData, String> {
     }
     let bytes = fs::read(&path).map_err(|e| format!("Could not read settings: {e}"))?;
     let state: AppStateData = serde_json::from_slice(&bytes).map_err(|e| format!("Saved settings are invalid: {e}"))?;
-    if state.schema_version != 1 { return Err("This SortSmith data version is not supported by this build.".into()); }
+    validate_state_data(&state)?;
     Ok(state)
 }
 
 #[tauri::command]
 fn save_state(app: AppHandle, state: AppStateData) -> Result<(), String> {
-    if state.schema_version != 1 { return Err("Unsupported settings schema version.".into()); }
+    validate_state_data(&state)?;
     let path = state_path(&app)?;
     atomic_json_write(&path, &state)
 }
@@ -94,13 +100,7 @@ fn list_journals(app: AppHandle) -> Result<Vec<JournalSummary>, String> {
         let Ok(bytes) = fs::read(&path) else { continue; };
         let Ok(journal) = serde_json::from_slice::<OperationJournal>(&bytes) else { continue; };
         let available_to_undo = journal.entries.iter().filter(|entry| entry.to.exists() && !entry.from.exists()).count();
-        summaries.push(JournalSummary {
-            id: journal.id,
-            created_at: journal.created_at,
-            root: journal.root,
-            entry_count: journal.entries.len(),
-            available_to_undo,
-        });
+        summaries.push(JournalSummary { id: journal.id, created_at: journal.created_at, root: journal.root, entry_count: journal.entries.len(), available_to_undo });
     }
 
     summaries.sort_by(|left, right| right.created_at.cmp(&left.created_at));
@@ -116,7 +116,7 @@ fn find_duplicate_candidates(root: String, recursive: bool, include_hidden: bool
 
 #[tauri::command]
 fn export_state(path: String, state: AppStateData) -> Result<(), String> {
-    if state.schema_version != 1 { return Err("Unsupported settings schema version.".into()); }
+    validate_state_data(&state)?;
     let target = validated_json_export_path(&path)?;
     atomic_json_write(&target, &state)
 }
@@ -128,7 +128,7 @@ fn import_state(path: String) -> Result<AppStateData, String> {
     if metadata.len() > MAX_IMPORT_BYTES { return Err("The selected settings file is too large to be a SortSmith export.".into()); }
     let bytes = fs::read(&source).map_err(|_| "Could not read the selected import file.".to_string())?;
     let state: AppStateData = serde_json::from_slice(&bytes).map_err(|_| "The selected file is not a valid SortSmith settings export.".to_string())?;
-    if state.schema_version != 1 { return Err("Unsupported import schema version.".into()); }
+    validate_state_data(&state)?;
     Ok(state)
 }
 
@@ -156,6 +156,49 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(messages)
 }
 
+fn validate_state_data(state: &AppStateData) -> Result<(), String> {
+    if state.schema_version != 1 { return Err("Unsupported settings schema version.".into()); }
+    if !matches!(state.settings.theme.as_str(), "system" | "light" | "dark") { return Err("Settings contain an unsupported theme value.".into()); }
+    if state.rules.len() > MAX_CUSTOM_RULES || state.presets.len() > MAX_PRESETS || state.watched_folders.len() > MAX_WATCHED_FOLDERS || state.recent_journal_ids.len() > MAX_RECENT_JOURNALS {
+        return Err("Settings contain more items than this SortSmith build supports.".into());
+    }
+
+    validate_unique_rule_ids(&state.rules)?;
+    for rule in &state.rules { sortsmith_core::rules::validate_rule(rule).map_err(|e| e.to_string())?; }
+
+    let mut preset_ids = HashSet::new();
+    for preset in &state.presets {
+        if !preset_ids.insert(preset.id) { return Err("Settings contain duplicate preset identifiers.".into()); }
+        if preset.name.trim().is_empty() || preset.name.chars().count() > 128 || preset.description.chars().count() > 512 || preset.rules.len() > MAX_RULES_PER_PRESET {
+            return Err("Settings contain an invalid preset definition.".into());
+        }
+        validate_unique_rule_ids(&preset.rules)?;
+        for rule in &preset.rules { sortsmith_core::rules::validate_rule(rule).map_err(|e| e.to_string())?; }
+    }
+
+    let mut watch_ids = HashSet::new();
+    for watch in &state.watched_folders {
+        if !watch_ids.insert(watch.id) { return Err("Settings contain duplicate watched-folder identifiers.".into()); }
+        let path_text = watch.path.to_string_lossy();
+        if path_text.trim().is_empty() || path_text.chars().count() > 4_096 || !(5..=10_080).contains(&watch.interval_minutes) {
+            return Err("Settings contain an invalid watched-folder entry.".into());
+        }
+        if let Some(preset_id) = watch.preset_id {
+            if !preset_ids.contains(&preset_id) { return Err("A watched folder references a preset that is not present in this backup.".into()); }
+        }
+    }
+
+    let mut journal_ids = HashSet::new();
+    if state.recent_journal_ids.iter().any(|id| !journal_ids.insert(*id)) { return Err("Settings contain duplicate undo-history identifiers.".into()); }
+    Ok(())
+}
+
+fn validate_unique_rule_ids(rules: &[Rule]) -> Result<(), String> {
+    let mut ids = HashSet::new();
+    if rules.iter().any(|rule| !ids.insert(rule.id)) { return Err("Settings contain duplicate rule identifiers.".into()); }
+    Ok(())
+}
+
 fn validate_journal_paths(journal: &OperationJournal) -> Result<(), String> {
     let root = validated_root(&journal.root.to_string_lossy()).map_err(|_| "The journal root is unavailable or invalid.".to_string())?;
     for entry in &journal.entries {
@@ -167,15 +210,9 @@ fn validate_journal_paths(journal: &OperationJournal) -> Result<(), String> {
 }
 
 fn safe_operation_path(root: &Path, path: &Path, must_exist: bool) -> bool {
-    if must_exist {
-        return path.canonicalize().is_ok_and(|candidate| candidate.starts_with(root));
-    }
-
+    if must_exist { return path.canonicalize().is_ok_and(|candidate| candidate.starts_with(root)); }
     let Ok(relative) = path.strip_prefix(root) else { return false; };
-    if relative.components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
-        return false;
-    }
-
+    if relative.components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) { return false; }
     let mut current = root.to_path_buf();
     if let Some(parent) = relative.parent() {
         for component in parent.components() {
@@ -193,17 +230,9 @@ fn safe_operation_path(root: &Path, path: &Path, must_exist: bool) -> bool {
 fn append_operation_log(app: &AppHandle, event: &str, journal_id: uuid::Uuid, completed: usize, error_count: usize) {
     let Ok(dir) = app_data_dir(app) else { return; };
     if fs::create_dir_all(&dir).is_err() { return; }
-    let record = serde_json::json!({
-        "timestamp": Utc::now(),
-        "event": event,
-        "journalId": journal_id,
-        "completed": completed,
-        "errorCount": error_count
-    });
+    let record = serde_json::json!({ "timestamp": Utc::now(), "event": event, "journalId": journal_id, "completed": completed, "errorCount": error_count });
     use std::io::Write;
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(dir.join("operations.jsonl")) {
-        let _ = writeln!(file, "{}", record);
-    }
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(dir.join("operations.jsonl")) { let _ = writeln!(file, "{}", record); }
 }
 
 fn validated_root(raw: &str) -> Result<PathBuf, String> {
@@ -212,32 +241,22 @@ fn validated_root(raw: &str) -> Result<PathBuf, String> {
     path.canonicalize().map_err(|e| format!("Could not resolve the selected folder: {e}"))
 }
 
-fn has_json_extension(path: &Path) -> bool {
-    path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("json"))
-}
+fn has_json_extension(path: &Path) -> bool { path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("json")) }
 
 fn validated_json_import_path(raw: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw.trim());
-    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) {
-        return Err("Choose an absolute .json settings file.".into());
-    }
+    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) { return Err("Choose an absolute .json settings file.".into()); }
     let link_metadata = fs::symlink_metadata(&path).map_err(|_| "The selected import file is unavailable.".to_string())?;
-    if link_metadata.file_type().is_symlink() || !link_metadata.is_file() {
-        return Err("The selected import must be a regular JSON file, not a link or directory.".into());
-    }
+    if link_metadata.file_type().is_symlink() || !link_metadata.is_file() { return Err("The selected import must be a regular JSON file, not a link or directory.".into()); }
     path.canonicalize().map_err(|_| "Could not resolve the selected import file.".to_string())
 }
 
 fn validated_json_export_path(raw: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw.trim());
-    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) {
-        return Err("Choose an absolute .json export path.".into());
-    }
+    if raw.trim().is_empty() || !path.is_absolute() || !has_json_extension(&path) { return Err("Choose an absolute .json export path.".into()); }
     if path.exists() {
         let metadata = fs::symlink_metadata(&path).map_err(|_| "Could not inspect the selected export path.".to_string())?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err("The export target must be a regular JSON file.".into());
-        }
+        if metadata.file_type().is_symlink() || !metadata.is_file() { return Err("The export target must be a regular JSON file.".into()); }
     }
     let parent = path.parent().ok_or_else(|| "The selected export path has no parent directory.".to_string())?;
     let parent = parent.canonicalize().map_err(|_| "The selected export directory is unavailable.".to_string())?;
@@ -255,26 +274,11 @@ fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), S
     let backup = parent.join(format!(".{filename}.{nonce}.bak"));
     let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
     fs::write(&temp, bytes).map_err(|e| format!("Could not write data: {e}"))?;
-
-    if !path.exists() {
-        return fs::rename(&temp, path).map_err(|e| format!("Could not finalize data file: {e}"));
-    }
-
-    fs::rename(path, &backup).map_err(|e| {
-        let _ = fs::remove_file(&temp);
-        format!("Could not prepare the existing data file for replacement: {e}")
-    })?;
-
+    if !path.exists() { return fs::rename(&temp, path).map_err(|e| format!("Could not finalize data file: {e}")); }
+    fs::rename(path, &backup).map_err(|e| { let _ = fs::remove_file(&temp); format!("Could not prepare the existing data file for replacement: {e}") })?;
     match fs::rename(&temp, path) {
-        Ok(()) => {
-            let _ = fs::remove_file(&backup);
-            Ok(())
-        }
-        Err(error) => {
-            let _ = fs::rename(&backup, path);
-            let _ = fs::remove_file(&temp);
-            Err(format!("Could not finalize data file: {error}"))
-        }
+        Ok(()) => { let _ = fs::remove_file(&backup); Ok(()) }
+        Err(error) => { let _ = fs::rename(&backup, path); let _ = fs::remove_file(&temp); Err(format!("Could not finalize data file: {error}")) }
     }
 }
 
