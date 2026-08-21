@@ -12,6 +12,16 @@ pub fn safe_subdirectory(root: &Path, subdirectory: &str) -> Result<PathBuf> {
     Ok(root.join(candidate))
 }
 
+pub fn validate_filename_fragment(fragment: &str, label: &str) -> Result<()> {
+    if fragment.trim().is_empty() {
+        return Err(SortSmithError::InvalidRule(format!("{label} cannot be empty")));
+    }
+    if fragment.chars().any(|ch| ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+        return Err(SortSmithError::InvalidRule(format!("{label} contains a character that is unsafe in a cross-platform filename")));
+    }
+    Ok(())
+}
+
 pub fn collision_safe_path(destination: &Path) -> PathBuf {
     if !destination.exists() {
         return destination.to_path_buf();
@@ -41,6 +51,13 @@ mod tests {
     fn rejects_parent_escape() {
         let root = Path::new("/tmp/root");
         assert!(safe_subdirectory(root, "../outside").is_err());
+    }
+
+    #[test]
+    fn rejects_unsafe_filename_fragments() {
+        assert!(validate_filename_fragment("../escape", "prefix").is_err());
+        assert!(validate_filename_fragment("bad:name", "prefix").is_err());
+        assert!(validate_filename_fragment("safe-prefix_", "prefix").is_ok());
     }
 
     #[test]

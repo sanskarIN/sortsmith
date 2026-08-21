@@ -29,8 +29,12 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
     let name = file.path.file_name().ok_or_else(|| SortSmithError::InvalidRule("file has no name".into()))?;
     match &rule.action {
         RuleAction::MoveTo { subdirectory } => Ok(crate::safety::safe_subdirectory(root, subdirectory)?.join(name)),
-        RuleAction::RenamePrefix { prefix } => Ok(file.path.with_file_name(format!("{prefix}{}", name.to_string_lossy()))),
+        RuleAction::RenamePrefix { prefix } => {
+            crate::safety::validate_filename_fragment(prefix, "rename prefix")?;
+            Ok(file.path.with_file_name(format!("{prefix}{}", name.to_string_lossy())))
+        }
         RuleAction::RenameTemplate { template } => {
+            crate::safety::validate_filename_fragment(template, "rename template")?;
             let stem = file.path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
             let ext = file.extension.as_deref().unwrap_or("");
             let mut rendered = template.replace("{name}", stem).replace("{ext}", ext);
@@ -46,5 +50,47 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
             }
             Ok(file.path.with_file_name(rendered))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{RuleAction, RuleCriterion};
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn entry() -> FileEntry {
+        FileEntry {
+            path: PathBuf::from("/tmp/root/report.txt"),
+            relative_path: PathBuf::from("report.txt"),
+            size: 12,
+            modified_at: None,
+            mime: Some("text/plain".into()),
+            extension: Some("txt".into()),
+        }
+    }
+
+    fn rule(action: RuleAction) -> Rule {
+        Rule {
+            id: Uuid::new_v4(),
+            name: "rename".into(),
+            enabled: true,
+            match_all: true,
+            criteria: vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
+            action,
+        }
+    }
+
+    #[test]
+    fn rejects_unsafe_rename_prefix() {
+        let result = destination_for(Path::new("/tmp/root"), &entry(), &rule(RuleAction::RenamePrefix { prefix: "../".into() }));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn renders_safe_template_and_preserves_extension() {
+        let result = destination_for(Path::new("/tmp/root"), &entry(), &rule(RuleAction::RenameTemplate { template: "{name}-sorted.{ext}".into() })).unwrap();
+        assert_eq!(result.file_name().unwrap(), "report-sorted.txt");
     }
 }
