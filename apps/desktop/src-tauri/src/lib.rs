@@ -1,12 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanOptions};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 const MAX_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JournalSummary {
+    id: uuid::Uuid,
+    created_at: DateTime<Utc>,
+    root: PathBuf,
+    entry_count: usize,
+    available_to_undo: usize,
+}
 
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| format!("Could not resolve app data directory: {e}"))
@@ -68,6 +78,37 @@ fn undo(app: AppHandle, journal_id: String) -> Result<ExecutionReport, String> {
 }
 
 #[tauri::command]
+fn list_journals(app: AppHandle) -> Result<Vec<JournalSummary>, String> {
+    let dir = journals_dir(&app)?;
+    if !dir.exists() { return Ok(Vec::new()); }
+    let entries = fs::read_dir(&dir).map_err(|_| "Could not read local undo history.".to_string())?;
+    let mut summaries = Vec::new();
+
+    for item in entries {
+        let Ok(item) = item else { continue; };
+        let path = item.path();
+        let is_journal = path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.ends_with(".journal.json"));
+        if !is_journal { continue; }
+        let Ok(metadata) = fs::symlink_metadata(&path) else { continue; };
+        if metadata.file_type().is_symlink() || !metadata.is_file() { continue; }
+        let Ok(bytes) = fs::read(&path) else { continue; };
+        let Ok(journal) = serde_json::from_slice::<OperationJournal>(&bytes) else { continue; };
+        let available_to_undo = journal.entries.iter().filter(|entry| entry.to.exists() && !entry.from.exists()).count();
+        summaries.push(JournalSummary {
+            id: journal.id,
+            created_at: journal.created_at,
+            root: journal.root,
+            entry_count: journal.entries.len(),
+            available_to_undo,
+        });
+    }
+
+    summaries.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    summaries.truncate(100);
+    Ok(summaries)
+}
+
+#[tauri::command]
 fn find_duplicate_candidates(root: String, recursive: bool, include_hidden: bool) -> Result<Vec<DuplicateGroup>, String> {
     let root = validated_root(&root)?;
     find_duplicates(&root, &ScanOptions { recursive, include_hidden, follow_links: false, max_depth: Some(64) }).map_err(|e| e.to_string())
@@ -118,7 +159,7 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
 fn validate_journal_paths(journal: &OperationJournal) -> Result<(), String> {
     let root = validated_root(&journal.root.to_string_lossy()).map_err(|_| "The journal root is unavailable or invalid.".to_string())?;
     for entry in &journal.entries {
-        if !safe_operation_path(&root, &entry.to, true) || !safe_operation_path(&root, &entry.from, false) {
+        if !safe_operation_path(&root, &entry.to, false) || !safe_operation_path(&root, &entry.from, false) {
             return Err("The undo journal contains a path outside its recorded root and was blocked.".into());
         }
     }
@@ -241,7 +282,7 @@ fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), S
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![load_state, save_state, preview, execute, undo, find_duplicate_candidates, export_state, import_state, run_due_watches])
+        .invoke_handler(tauri::generate_handler![load_state, save_state, preview, execute, undo, list_journals, find_duplicate_candidates, export_state, import_state, run_due_watches])
         .run(tauri::generate_context!())
         .expect("error while running SortSmith");
 }
