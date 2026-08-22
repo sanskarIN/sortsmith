@@ -43,8 +43,12 @@ function App() {
   }, []);
 
   async function persist(next: AppStateData) {
-    setState(next);
-    try { await backend.saveState(next); } catch { setMessage("Your setting changed for this session, but could not be saved."); }
+    try {
+      await backend.saveState(next);
+      setState(next);
+    } catch (error) {
+      setMessage(`The change could not be saved, so the previous settings remain active. ${String(error)}`);
+    }
   }
 
   async function pickRootFolder() {
