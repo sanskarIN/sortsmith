@@ -10,22 +10,24 @@
 
 SortSmith is an offline-first desktop file organizer built with **Rust + Tauri + React**. It previews changes before touching the filesystem, records reversible operation journals, detects duplicate candidates by content hash without deleting them, and can run user-controlled watched-folder rules while the app is open.
 
-> **Development status:** the `0.1.0` implementation baseline is in place. Do not treat it as a published release until the repository's cross-platform CI, clean installer smoke tests, and release checklist are green.
+> **Development status:** the `0.1.0` implementation baseline is in place. Do not treat it as a published release until cross-platform CI, clean installer smoke tests, and the release checklist are green.
 
 ## Screenshots
 
-Real release screenshots will be captured from verified release builds. Placeholder policy and capture requirements live in [`docs/screenshots/README.md`](docs/screenshots/README.md). Until then, the UI is reproducible from source with the development commands below.
+Real release screenshots will be captured from verified release builds. Capture requirements live in [`docs/screenshots/README.md`](docs/screenshots/README.md). Until then, the UI is reproducible from source with the development commands below.
 
 ## Features
 
 - Rules by extension, MIME prefix, modified age, size range, and filename regex.
+- Multi-criterion rule builder with match-all/match-any behavior and reusable presets.
+- Native folder picker plus typed-path fallback.
 - Dry-run previews with source/destination visibility before any change.
-- Collision-safe renaming and moving.
-- Reversible JSON journals and one-click latest undo.
-- BLAKE3 duplicate-candidate detection with size pre-filtering and no auto-delete.
-- Reusable presets and custom rules.
-- Watched folders with user-controlled intervals while SortSmith is running.
-- Local settings, export/import backend commands, and schema-versioned persistence.
+- Collision-safe moving and renaming with cross-platform filename validation.
+- Reversible JSON journals, latest undo, and selectable operation-history undo.
+- BLAKE3 duplicate-candidate detection with size pre-filtering, parallel hashing, hidden-folder controls, and no auto-delete.
+- Watched folders with user-controlled presets and intervals while SortSmith is running.
+- Native JSON settings backup/restore with schema validation and local undo-history preservation.
+- Bounded, durable local settings persistence and rotating privacy-safe operation logs.
 - Light, dark, and system themes; keyboard focus states; reduced-motion preference.
 - Permission failures are isolated as recoverable errors where possible.
 - No cloud account, telemetry, or file-content collection.
@@ -44,10 +46,11 @@ Real release screenshots will be captured from verified release builds. Placehol
 - Tauri 2 desktop host.
 - React 19 + TypeScript + Vite frontend.
 - BLAKE3, WalkDir, Rayon, Regex, Serde, Chrono.
+- GitHub Actions CI and CodeQL scanning for TypeScript and Rust.
 
 ## Quick start
 
-Prerequisites: Rust stable, Node.js 22+, npm, and the platform packages required by Tauri.
+Prerequisites: Rust stable with Rust 2024 edition support, **Node.js 22**, **npm 10**, and the platform packages required by Tauri.
 
 ```bash
 git clone https://github.com/sanskarIN/sortsmith.git
@@ -71,6 +74,8 @@ npm test
 npm run build
 ```
 
+CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose.
+
 ## Build and release
 
 ```bash
@@ -79,7 +84,13 @@ npm install --no-audit --no-fund
 npm run tauri build
 ```
 
-Packaging is automated by `.github/workflows/release.yml` for version tags. Release guidance is in [`docs/release.md`](docs/release.md).
+Before creating a version tag, verify that Cargo, frontend, and Tauri metadata all match:
+
+```bash
+node scripts/verify-release-version.mjs v0.1.0
+```
+
+Packaging is automated by `.github/workflows/release.yml` for `v*` tags and repeats the version check before building on Windows, macOS, and Linux. Release guidance is in [`docs/release.md`](docs/release.md).
 
 ## Architecture
 
@@ -87,7 +98,7 @@ The repository is a modular monolith: deterministic filesystem domain logic live
 
 ## Security and privacy
 
-SortSmith deliberately avoids network features in its core workflows. It does not upload file contents or filenames. Undo journals contain local file paths because reversal requires them. See [`SECURITY.md`](SECURITY.md) and [`PRIVACY.md`](PRIVACY.md).
+SortSmith deliberately avoids network features in its core workflows. It does not upload file contents or filenames. Undo journals contain local file paths because reversal requires them; portable settings backups omit undo-history identifiers. Saved settings and imported backups are bounded and validated before use, and privacy-safe operation logs contain counts/identifiers rather than file paths or content. See [`SECURITY.md`](SECURITY.md) and [`PRIVACY.md`](PRIVACY.md).
 
 ## Contributing
 
