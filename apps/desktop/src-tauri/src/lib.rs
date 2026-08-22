@@ -3,11 +3,12 @@
 use chrono::{DateTime, Duration, Utc};
 use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanOptions};
 use std::collections::HashSet;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
-const MAX_IMPORT_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CUSTOM_RULES: usize = 500;
 const MAX_PRESETS: usize = 50;
 const MAX_RULES_PER_PRESET: usize = 500;
@@ -39,8 +40,15 @@ fn load_state(app: AppHandle) -> Result<AppStateData, String> {
         save_state(app, state.clone())?;
         return Ok(state);
     }
-    let bytes = fs::read(&path).map_err(|e| format!("Could not read settings: {e}"))?;
-    let state: AppStateData = serde_json::from_slice(&bytes).map_err(|e| format!("Saved settings are invalid: {e}"))?;
+    let metadata = fs::symlink_metadata(&path).map_err(|e| format!("Could not inspect saved settings: {e}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Saved settings must be a regular local file.".into());
+    }
+    if metadata.len() > MAX_STATE_BYTES {
+        return Err("Saved settings exceed the supported local state size.".into());
+    }
+    let file = File::open(&path).map_err(|e| format!("Could not read settings: {e}"))?;
+    let state: AppStateData = serde_json::from_reader(BufReader::new(file)).map_err(|e| format!("Saved settings are invalid: {e}"))?;
     validate_state_data(&state)?;
     Ok(state)
 }
@@ -97,8 +105,7 @@ fn list_journals(app: AppHandle) -> Result<Vec<JournalSummary>, String> {
         if !is_journal { continue; }
         let Ok(metadata) = fs::symlink_metadata(&path) else { continue; };
         if metadata.file_type().is_symlink() || !metadata.is_file() { continue; }
-        let Ok(bytes) = fs::read(&path) else { continue; };
-        let Ok(journal) = serde_json::from_slice::<OperationJournal>(&bytes) else { continue; };
+        let Ok(journal) = sortsmith_core::journal::load_journal(&path) else { continue; };
         let available_to_undo = journal.entries.iter().filter(|entry| entry.to.exists() && !entry.from.exists()).count();
         summaries.push(JournalSummary { id: journal.id, created_at: journal.created_at, root: journal.root, entry_count: journal.entries.len(), available_to_undo });
     }
@@ -125,9 +132,9 @@ fn export_state(path: String, state: AppStateData) -> Result<(), String> {
 fn import_state(path: String) -> Result<AppStateData, String> {
     let source = validated_json_import_path(&path)?;
     let metadata = fs::metadata(&source).map_err(|_| "Could not inspect the selected import file.".to_string())?;
-    if metadata.len() > MAX_IMPORT_BYTES { return Err("The selected settings file is too large to be a SortSmith export.".into()); }
-    let bytes = fs::read(&source).map_err(|_| "Could not read the selected import file.".to_string())?;
-    let state: AppStateData = serde_json::from_slice(&bytes).map_err(|_| "The selected file is not a valid SortSmith settings export.".to_string())?;
+    if metadata.len() > MAX_STATE_BYTES { return Err("The selected settings file is too large to be a SortSmith export.".into()); }
+    let file = File::open(&source).map_err(|_| "Could not read the selected import file.".to_string())?;
+    let state: AppStateData = serde_json::from_reader(BufReader::new(file)).map_err(|_| "The selected file is not a valid SortSmith settings export.".to_string())?;
     validate_state_data(&state)?;
     Ok(state)
 }
@@ -231,7 +238,6 @@ fn append_operation_log(app: &AppHandle, event: &str, journal_id: uuid::Uuid, co
     let Ok(dir) = app_data_dir(app) else { return; };
     if fs::create_dir_all(&dir).is_err() { return; }
     let record = serde_json::json!({ "timestamp": Utc::now(), "event": event, "journalId": journal_id, "completed": completed, "errorCount": error_count });
-    use std::io::Write;
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(dir.join("operations.jsonl")) { let _ = writeln!(file, "{}", record); }
 }
 
@@ -272,9 +278,32 @@ fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), S
     let nonce = uuid::Uuid::new_v4();
     let temp = parent.join(format!(".{filename}.{nonce}.tmp"));
     let backup = parent.join(format!(".{filename}.{nonce}.bak"));
-    let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
-    fs::write(&temp, bytes).map_err(|e| format!("Could not write data: {e}"))?;
-    if !path.exists() { return fs::rename(&temp, path).map_err(|e| format!("Could not finalize data file: {e}")); }
+
+    let file = File::create(&temp).map_err(|e| format!("Could not create temporary data file: {e}"))?;
+    let mut writer = BufWriter::new(file);
+    if let Err(error) = serde_json::to_writer_pretty(&mut writer, value) {
+        drop(writer);
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Could not serialize data: {error}"));
+    }
+    if let Err(error) = writer.flush() {
+        drop(writer);
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Could not flush data: {error}"));
+    }
+    if let Err(error) = writer.get_ref().sync_all() {
+        drop(writer);
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Could not sync data: {error}"));
+    }
+    let size = writer.get_ref().metadata().map_err(|e| format!("Could not inspect temporary data: {e}"))?.len();
+    drop(writer);
+    if size > MAX_STATE_BYTES {
+        let _ = fs::remove_file(&temp);
+        return Err("Settings exceed the supported local state size.".into());
+    }
+
+    if !path.exists() { return fs::rename(&temp, path).map_err(|e| { let _ = fs::remove_file(&temp); format!("Could not finalize data file: {e}") }); }
     fs::rename(path, &backup).map_err(|e| { let _ = fs::remove_file(&temp); format!("Could not prepare the existing data file for replacement: {e}") })?;
     match fs::rename(&temp, path) {
         Ok(()) => { let _ = fs::remove_file(&backup); Ok(()) }
