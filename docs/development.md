@@ -3,24 +3,56 @@
 ## Repository layout
 
 - `crates/sortsmith-core` — platform-neutral Rust business logic.
-- `apps/desktop/src-tauri` — Tauri adapter and persistence.
+- `apps/desktop/src-tauri` — Tauri adapter, persistence, filesystem boundary validation, local logging, and command API.
 - `apps/desktop/src` — React/TypeScript UI.
-- `docs` — architecture, testing, release, accessibility, and operations notes.
+- `scripts` — repository/release verification helpers.
+- `docs` — architecture, testing, release, accessibility, performance, and operations notes.
 
 ## Recommended loop
 
+From the repository root:
+
 ```bash
 cargo test -p sortsmith-core
+cargo test -p sortsmith
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
+Then:
+
+```bash
 cd apps/desktop
+npm install --no-audit --no-fund
 npm run typecheck
 npm test
+npm run build
 npm run tauri dev
 ```
 
-Use fictional fixtures only. Never point development automation at an irreplaceable folder; create a temporary test directory instead.
+Use fictional fixtures only. Never point development automation at an irreplaceable folder; create a temporary test directory instead. Keep symlink and permission-edge tests inside disposable fixtures.
+
+## Release metadata check
+
+Before a version tag, run from the repository root:
+
+```bash
+node scripts/verify-release-version.mjs v0.1.0
+```
+
+The script verifies that the workspace Cargo version, frontend package version, and Tauri version match the requested release tag. CI repeats this check in the release workflow.
 
 ## Dependency policy
 
-Frontend direct dependencies and dev dependencies are pinned to exact versions in `package.json`. Dependabot proposes updates weekly. Rust dependencies are constrained through the workspace manifest and will produce a shared `Cargo.lock` on the first Rust-capable build. The first networked release-preparation environment should also generate and commit `package-lock.json` and `Cargo.lock` before a release tag.
+Frontend direct dependencies and dev dependencies are pinned to exact versions in `package.json`. `package.json` also declares the supported Node.js 22/npm 10 runtime range. Dependabot proposes updates weekly. Rust dependencies are constrained through the workspace manifest and will produce a shared `Cargo.lock` on the first Rust-capable networked build.
+
+The first trusted networked release-preparation environment must generate and commit `apps/desktop/package-lock.json` and `Cargo.lock` before a release tag. After lockfiles exist, release/CI installation should migrate to lockfile-enforcing commands (`npm ci` and Cargo `--locked`) rather than silently resolving new dependency graphs.
+
+## Change discipline
+
+- Keep domain rules in `sortsmith-core` rather than duplicating them in the UI.
+- Validate untrusted UI/import data again in Rust.
+- Add a regression test for every fixed filesystem/path rule when practical.
+- Do not log file contents, filenames, or paths in structured operation telemetry.
+- Update `CHANGELOG.md`, relevant docs, and `what_changed.md` after meaningful work.
+- Prefer small Conventional Commits with one reviewable purpose.
