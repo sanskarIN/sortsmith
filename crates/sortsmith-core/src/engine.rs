@@ -44,8 +44,8 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
 }
 
 pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path) -> Result<ExecutionReport> {
-    fs::create_dir_all(journal_dir).map_err(|e| io(journal_dir, e))?;
     let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: root.to_path_buf(), entries: Vec::new() };
+    save_journal(journal_dir, &journal)?;
     let mut errors = Vec::new();
     for op in &preview.operations {
         let destination = collision_safe_path(&op.destination);
@@ -148,5 +148,18 @@ mod tests {
         let mut invalid = txt_rule();
         invalid.action = RuleAction::MoveTo { subdirectory: "../outside".into() };
         assert!(preview_organization(root.path(), &[invalid], &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn journal_preflight_failure_does_not_move_files() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        let blocked_journal_dir = root.path().join("journal-blocker");
+        std::fs::write(&blocked_journal_dir, b"not a directory").unwrap();
+
+        assert!(execute_preview(root.path(), &preview, &blocked_journal_dir).is_err());
+        assert!(root.path().join("note.txt").exists());
+        assert!(!root.path().join("Text").join("note.txt").exists());
     }
 }
