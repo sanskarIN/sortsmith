@@ -6,17 +6,30 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 ### Added
 - Production-oriented Rust/Tauri/React SortSmith baseline.
-- Rules for extension, MIME prefix, age, size, and filename regex.
-- Dry-run organization, collision-safe moves/renames, reversible journals, and undo.
+- Rules for extension, MIME prefix, age, size, and filename regex, including a multi-criterion rule builder and reusable presets.
+- Dry-run organization, collision-safe moves/renames, reversible journals, latest undo, and selectable operation-history undo.
 - Duplicate detection with BLAKE3 and no automatic deletion.
-- Presets, custom rules, watched folders, schema-versioned local settings, import/export backend commands, and operation logging.
+- Watched-folder automation with user-controlled presets and intervals while the desktop app is open.
+- Native folder selection plus native settings backup/import dialogs.
+- Schema-versioned local settings, bounded JSON persistence, and privacy-safe rotating operation logs.
 - Responsive light/dark/system UI with accessibility baseline and About/support/funding information.
-- Full project documentation, ADRs, contribution/security/privacy policies, CI, CodeQL, Dependabot, issue/PR templates, and release automation.
+- Full project documentation, ADRs, contribution/security/privacy policies, CI, Dependabot, CodeQL for TypeScript and Rust, issue/PR templates, and cross-platform release automation.
+- Release metadata verification that rejects version tags inconsistent with Cargo, frontend, or Tauri versions.
+
+### Changed
+- Undo journal persistence and loading now stream JSON instead of allocating an additional whole-document byte buffer.
+- Frontend tooling declares the supported Node.js 22 and npm 10 runtime range.
+- CI now runs desktop-host unit tests in addition to Rust checks, Clippy, core tests, frontend tests, type checking, and builds.
 
 ### Security
 - Root canonicalization and planned-operation containment checks.
 - Parent traversal rejection and destination symlink escape protection.
 - No link-following during normal scans and no file-content/path data in structured operation logs.
+- Hidden directories are pruned during duplicate scans unless the user explicitly enables hidden-file scanning.
+- Rendered rename destinations reject non-portable filenames, Windows-reserved device names, unsafe characters, and overlong names.
+- Collision fallback never returns an already occupied destination after the normal numeric suffix range is exhausted.
+- Saved settings reject symlink-backed state files, enforce a 16 MiB storage/import contract, and sync temporary files before replacement.
+- Operation logs refuse symlink/non-file targets and rotate at 5 MiB to bound local growth.
 
 ## [0.1.0] - 2026-08-21
 
