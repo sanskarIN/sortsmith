@@ -16,10 +16,40 @@ pub fn validate_filename_fragment(fragment: &str, label: &str) -> Result<()> {
     if fragment.trim().is_empty() {
         return Err(SortSmithError::InvalidRule(format!("{label} cannot be empty")));
     }
-    if fragment.chars().any(|ch| ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+    if contains_invalid_filename_character(fragment) {
         return Err(SortSmithError::InvalidRule(format!("{label} contains a character that is unsafe in a cross-platform filename")));
     }
     Ok(())
+}
+
+pub fn validate_filename(filename: &str, label: &str) -> Result<()> {
+    if filename.is_empty() || matches!(filename, "." | "..") {
+        return Err(SortSmithError::InvalidRule(format!("{label} cannot be empty or a reserved path component")));
+    }
+    if filename.as_bytes().len() > 255 || filename.encode_utf16().count() > 255 {
+        return Err(SortSmithError::InvalidRule(format!("{label} is too long for a portable filename")));
+    }
+    if contains_invalid_filename_character(filename) {
+        return Err(SortSmithError::InvalidRule(format!("{label} contains a character that is unsafe in a cross-platform filename")));
+    }
+    if filename.ends_with([' ', '.']) {
+        return Err(SortSmithError::InvalidRule(format!("{label} cannot end with a space or period")));
+    }
+    if is_windows_reserved_name(filename) {
+        return Err(SortSmithError::InvalidRule(format!("{label} uses a Windows-reserved device name")));
+    }
+    Ok(())
+}
+
+fn contains_invalid_filename_character(value: &str) -> bool {
+    value.chars().any(|ch| ch.is_control() || matches!(ch, '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*'))
+}
+
+fn is_windows_reserved_name(filename: &str) -> bool {
+    let stem = filename.split('.').next().unwrap_or(filename).trim_end_matches([' ', '.']).to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || stem.strip_prefix("COM").is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
+        || stem.strip_prefix("LPT").is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
 }
 
 pub fn collision_safe_path(destination: &Path) -> PathBuf {
@@ -39,7 +69,18 @@ pub fn collision_safe_path(destination: &Path) -> PathBuf {
             return candidate;
         }
     }
-    destination.to_path_buf()
+
+    loop {
+        let suffix = uuid::Uuid::new_v4().simple();
+        let filename = match ext {
+            Some(ext) => format!("{stem} ({suffix}).{ext}"),
+            None => format!("{stem} ({suffix})"),
+        };
+        let candidate = parent.join(filename);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -58,6 +99,21 @@ mod tests {
         assert!(validate_filename_fragment("../escape", "prefix").is_err());
         assert!(validate_filename_fragment("bad:name", "prefix").is_err());
         assert!(validate_filename_fragment("safe-prefix_", "prefix").is_ok());
+    }
+
+    #[test]
+    fn rejects_non_portable_rendered_filenames() {
+        assert!(validate_filename("CON.txt", "filename").is_err());
+        assert!(validate_filename("LPT9", "filename").is_err());
+        assert!(validate_filename("report. ", "filename").is_err());
+        assert!(validate_filename("report.", "filename").is_err());
+        assert!(validate_filename("report-final.txt", "filename").is_ok());
+    }
+
+    #[test]
+    fn rejects_overlong_rendered_filenames() {
+        let name = format!("{}.txt", "a".repeat(252));
+        assert!(validate_filename(&name, "filename").is_err());
     }
 
     #[test]
