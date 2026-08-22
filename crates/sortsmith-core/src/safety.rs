@@ -1,4 +1,5 @@
 use crate::{error::SortSmithError, Result};
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
 pub fn safe_subdirectory(root: &Path, subdirectory: &str) -> Result<PathBuf> {
@@ -53,7 +54,11 @@ fn is_windows_reserved_name(filename: &str) -> bool {
 }
 
 pub fn collision_safe_path(destination: &Path) -> PathBuf {
-    if !destination.exists() {
+    collision_safe_path_with_reserved(destination, &HashSet::new())
+}
+
+pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<PathBuf>) -> PathBuf {
+    if !destination.exists() && !reserved.contains(destination) {
         return destination.to_path_buf();
     }
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
@@ -65,7 +70,7 @@ pub fn collision_safe_path(destination: &Path) -> PathBuf {
             None => format!("{stem} ({n})"),
         };
         let candidate = parent.join(filename);
-        if !candidate.exists() {
+        if !candidate.exists() && !reserved.contains(&candidate) {
             return candidate;
         }
     }
@@ -77,7 +82,7 @@ pub fn collision_safe_path(destination: &Path) -> PathBuf {
             None => format!("{stem} ({suffix})"),
         };
         let candidate = parent.join(filename);
-        if !candidate.exists() {
+        if !candidate.exists() && !reserved.contains(&candidate) {
             return candidate;
         }
     }
@@ -123,5 +128,16 @@ mod tests {
         std::fs::write(&existing, b"x").unwrap();
         let candidate = collision_safe_path(&existing);
         assert_eq!(candidate.file_name().unwrap(), "report (1).pdf");
+    }
+
+    #[test]
+    fn reserved_collision_path_uses_next_suffix() {
+        let dir = tempdir().unwrap();
+        let desired = dir.path().join("report.pdf");
+        let mut reserved = HashSet::new();
+        reserved.insert(desired.clone());
+        reserved.insert(dir.path().join("report (1).pdf"));
+        let candidate = collision_safe_path_with_reserved(&desired, &reserved);
+        assert_eq!(candidate.file_name().unwrap(), "report (2).pdf");
     }
 }
