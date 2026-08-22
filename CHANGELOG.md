@@ -18,11 +18,18 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 ### Changed
 - Undo journal persistence and loading now stream JSON instead of allocating an additional whole-document byte buffer.
+- Execution verifies that undo-journal storage can be initialized before the first file mutation.
 - Frontend tooling declares the supported Node.js 22 and npm 10 runtime range.
+- Rejected settings/rule state is no longer activated optimistically in the running UI when persistence fails.
 - CI now runs desktop-host unit tests in addition to Rust checks, Clippy, core tests, frontend tests, type checking, and builds.
 
+### Accessibility
+- The active sidebar destination exposes `aria-current="page"` to assistive technologies.
+- About now exposes both business contacts, support, funding, license, version, and project credit.
+
 ### Security
-- Root canonicalization and planned-operation containment checks.
+- Root canonicalization and planned-operation containment checks exist in both the desktop boundary and core execution path.
+- Forged execution previews that point sources or destinations outside the selected root are rejected before mutation.
 - Parent traversal rejection and destination symlink escape protection.
 - No link-following during normal scans and no file-content/path data in structured operation logs.
 - Hidden directories are pruned during duplicate scans unless the user explicitly enables hidden-file scanning.
