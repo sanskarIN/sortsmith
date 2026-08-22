@@ -9,6 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_OPERATION_LOG_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_CUSTOM_RULES: usize = 500;
 const MAX_PRESETS: usize = 50;
 const MAX_RULES_PER_PRESET: usize = 500;
@@ -237,8 +238,25 @@ fn safe_operation_path(root: &Path, path: &Path, must_exist: bool) -> bool {
 fn append_operation_log(app: &AppHandle, event: &str, journal_id: uuid::Uuid, completed: usize, error_count: usize) {
     let Ok(dir) = app_data_dir(app) else { return; };
     if fs::create_dir_all(&dir).is_err() { return; }
+    let path = dir.join("operations.jsonl");
+    if !prepare_operation_log(&path, MAX_OPERATION_LOG_BYTES) { return; }
     let record = serde_json::json!({ "timestamp": Utc::now(), "event": event, "journalId": journal_id, "completed": completed, "errorCount": error_count });
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(dir.join("operations.jsonl")) { let _ = writeln!(file, "{}", record); }
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) { let _ = writeln!(file, "{}", record); }
+}
+
+fn prepare_operation_log(path: &Path, max_bytes: u64) -> bool {
+    if !path.exists() { return true; }
+    let Ok(metadata) = fs::symlink_metadata(path) else { return false; };
+    if metadata.file_type().is_symlink() || !metadata.is_file() { return false; }
+    if metadata.len() < max_bytes { return true; }
+
+    let previous = path.with_file_name("operations.previous.jsonl");
+    if previous.exists() {
+        let Ok(previous_metadata) = fs::symlink_metadata(&previous) else { return false; };
+        if previous_metadata.file_type().is_symlink() || !previous_metadata.is_file() { return false; }
+        if fs::remove_file(&previous).is_err() { return false; }
+    }
+    fs::rename(path, previous).is_ok()
 }
 
 fn validated_root(raw: &str) -> Result<PathBuf, String> {
@@ -308,6 +326,39 @@ fn atomic_json_write(path: &Path, value: &impl serde::Serialize) -> Result<(), S
     match fs::rename(&temp, path) {
         Ok(()) => { let _ = fs::remove_file(&backup); Ok(()) }
         Err(error) => { let _ = fs::rename(&backup, path); let _ = fs::remove_file(&temp); Err(format!("Could not finalize data file: {error}")) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rotates_operation_log_at_limit() {
+        let dir = std::env::temp_dir().join(format!("sortsmith-log-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("operations.jsonl");
+        fs::write(&path, b"12345").unwrap();
+
+        assert!(prepare_operation_log(&path, 5));
+        assert!(!path.exists());
+        assert_eq!(fs::read(dir.join("operations.previous.jsonl")).unwrap(), b"12345");
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn leaves_small_operation_log_in_place() {
+        let dir = std::env::temp_dir().join(format!("sortsmith-log-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("operations.jsonl");
+        fs::write(&path, b"1234").unwrap();
+
+        assert!(prepare_operation_log(&path, 5));
+        assert!(path.exists());
+        assert!(!dir.join("operations.previous.jsonl").exists());
+
+        fs::remove_dir_all(dir).unwrap();
     }
 }
 
