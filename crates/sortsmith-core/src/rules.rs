@@ -12,10 +12,14 @@ pub struct PreparedRule<'a> {
 impl<'a> PreparedRule<'a> {
     pub fn new(rule: &'a Rule) -> Result<Self> {
         validate_rule(rule)?;
-        let regexes = rule.criteria.iter().map(|criterion| match criterion {
-            RuleCriterion::NameRegex { pattern } => Regex::new(pattern).ok(),
-            _ => None,
-        }).collect();
+        let regexes = rule
+            .criteria
+            .iter()
+            .map(|criterion| match criterion {
+                RuleCriterion::NameRegex { pattern } => Regex::new(pattern).ok(),
+                _ => None,
+            })
+            .collect();
         Ok(Self { rule, regexes })
     }
 
@@ -97,7 +101,9 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
         RuleAction::MoveTo { subdirectory } => Ok(crate::safety::safe_subdirectory(root, subdirectory)?.join(name)),
         RuleAction::RenamePrefix { prefix } => {
             crate::safety::validate_filename_fragment(prefix, "rename prefix")?;
-            Ok(file.path.with_file_name(format!("{prefix}{}", name.to_string_lossy())))
+            let rendered = format!("{prefix}{}", name.to_string_lossy());
+            crate::safety::validate_filename(&rendered, "renamed file")?;
+            Ok(file.path.with_file_name(rendered))
         }
         RuleAction::RenameTemplate { template } => {
             crate::safety::validate_filename_fragment(template, "rename template")?;
@@ -109,6 +115,7 @@ pub fn destination_for(root: &Path, file: &FileEntry, rule: &Rule) -> Result<Pat
             }
             if rendered.trim().is_empty() { return Err(SortSmithError::InvalidRule("rename template cannot produce an empty name".into())); }
             if !ext.is_empty() && !rendered.ends_with(&format!(".{ext}")) { rendered.push('.'); rendered.push_str(ext); }
+            crate::safety::validate_filename(&rendered, "renamed file")?;
             Ok(file.path.with_file_name(rendered))
         }
     }
@@ -163,5 +170,23 @@ mod tests {
         validate_rule(&candidate).unwrap();
         let result = destination_for(Path::new("/tmp/root"), &entry(), &candidate).unwrap();
         assert_eq!(result.file_name().unwrap(), "report-sorted.txt");
+    }
+
+    #[test]
+    fn rejects_reserved_rendered_filename() {
+        let candidate = rule(RuleAction::RenameTemplate { template: "CON.{ext}".into() });
+        validate_rule(&candidate).unwrap();
+        assert!(destination_for(Path::new("/tmp/root"), &entry(), &candidate).is_err());
+    }
+
+    #[test]
+    fn rejects_trailing_period_for_extensionless_file() {
+        let candidate = rule(RuleAction::RenameTemplate { template: "{name}.".into() });
+        validate_rule(&candidate).unwrap();
+        let mut extensionless = entry();
+        extensionless.path = PathBuf::from("/tmp/root/report");
+        extensionless.relative_path = PathBuf::from("report");
+        extensionless.extension = None;
+        assert!(destination_for(Path::new("/tmp/root"), &extensionless, &candidate).is_err());
     }
 }
