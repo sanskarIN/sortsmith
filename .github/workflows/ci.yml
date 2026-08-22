@@ -44,6 +44,8 @@ jobs:
         run: cargo check -p sortsmith
       - name: Clippy desktop host
         run: cargo clippy -p sortsmith --all-targets -- -D warnings
+      - name: Test desktop host
+        run: cargo test -p sortsmith
 
   frontend:
     runs-on: ubuntu-latest
