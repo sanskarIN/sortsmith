@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isEditingTarget, shortcutFor, type PageShortcut } from "./shortcuts";
+import "./shortcuts.css";
 
 interface KeyboardControllerProps {
   busy: boolean;
