@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { isBundledPresetId } from "./bundledPresets";
 import { cloneRules, createPreset, renamePreset } from "./presets";
 import type { AppStateData, Rule } from "./types";
 
@@ -17,9 +18,8 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const selectedIndex = state.presets.findIndex(preset => preset.id === selectedId);
-  const selected = selectedIndex >= 0 ? state.presets[selectedIndex] : undefined;
-  const selectedIsBuiltIn = selectedIndex === 0;
+  const selected = state.presets.find(preset => preset.id === selectedId);
+  const selectedIsBuiltIn = isBundledPresetId(selected?.id);
   const selectedIsUsedByWatch = useMemo(
     () => state.watchedFolders.some(watch => watch.presetId === selected?.id),
     [selected?.id, state.watchedFolders],
@@ -102,7 +102,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     <div className="panel-head">
       <div>
         <h3>Saved presets</h3>
-        <p>Snapshot the active rule set, then reuse it without rebuilding each rule.</p>
+        <p>Load bundled packs or snapshot the active rule set for later reuse.</p>
       </div>
       <span className="pill">{state.presets.length}/50 presets</span>
     </div>
@@ -110,7 +110,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     <div className="form-grid">
       <label>Preset to manage
         <select value={selectedId} onChange={event => setSelectedId(event.target.value)}>
-          {state.presets.map((preset, index) => <option key={preset.id} value={preset.id}>{preset.name}{index === 0 ? " (built in)" : ""}</option>)}
+          {state.presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}{isBundledPresetId(preset.id) ? " (built in)" : ""}</option>)}
         </select>
       </label>
       <label>Name
@@ -126,7 +126,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
       <button
         onClick={() => void deleteSelected()}
         disabled={!selected || selectedIsBuiltIn || selectedIsUsedByWatch}
-        title={selectedIsUsedByWatch ? "Remove this preset from watched folders before deleting it." : undefined}
+        title={selectedIsBuiltIn ? "Bundled presets are protected so the built-in library remains recoverable." : selectedIsUsedByWatch ? "Remove this preset from watched folders before deleting it." : undefined}
       >Delete preset</button>
     </div>
 
@@ -136,7 +136,8 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
       <label>New preset description<input value={newDescription} onChange={event => setNewDescription(event.target.value)} placeholder="Optional note about when to use it"/></label>
     </div>
     <div className="actions"><button onClick={() => void saveCurrentRules()} disabled={!effectiveRules.length}>Save active rules as preset</button></div>
-    {selectedIsUsedByWatch && <p className="hint">This preset is assigned to a watched folder, so it cannot be deleted until that assignment is changed.</p>}
+    {selectedIsBuiltIn && <p className="hint">Bundled presets can be loaded but not renamed or deleted. Save a customized active rule set as a new preset instead.</p>}
+    {!selectedIsBuiltIn && selectedIsUsedByWatch && <p className="hint">This preset is assigned to a watched folder, so it cannot be deleted until that assignment is changed.</p>}
     {message && <p className="hint" role="status">{message}</p>}
     {error && <p className="hint" role="alert">{error}</p>}
   </div>;
