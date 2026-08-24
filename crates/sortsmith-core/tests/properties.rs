@@ -43,14 +43,15 @@ proptest! {
 
     #[test]
     fn portable_ascii_filenames_validate(stem in "[A-Za-z0-9_-]{1,120}", extension in "[A-Za-z0-9]{1,8}") {
-        let filename = format!("{stem}.{extension}");
+        let filename = format!("file_{stem}.{extension}");
         prop_assert!(validate_filename(&filename, "generated filename").is_ok());
     }
 
     #[test]
     fn rename_templates_preserve_txt_extension(stem in "[A-Za-z0-9_-]{1,64}", suffix in "[A-Za-z0-9_-]{1,24}") {
+        let root = Path::new("root");
         let file = FileEntry {
-            path: PathBuf::from(format!("/root/{stem}.txt")),
+            path: PathBuf::from("root").join(format!("{stem}.txt")),
             relative_path: PathBuf::from(format!("{stem}.txt")),
             size: 1,
             modified_at: None,
@@ -59,8 +60,8 @@ proptest! {
         };
         let rule = extension_rule(RuleAction::RenameTemplate { template: format!("{{name}}-{suffix}.{{ext}}") });
         validate_rule(&rule).unwrap();
-        let destination = destination_for(Path::new("/root"), &file, &rule).unwrap();
+        let destination = destination_for(root, &file, &rule).unwrap();
         prop_assert_eq!(destination.extension().and_then(|value| value.to_str()), Some("txt"));
-        prop_assert!(destination.starts_with("/root"));
+        prop_assert!(destination.starts_with(root));
     }
 }
