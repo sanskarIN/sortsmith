@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isEditingTarget, shortcutFor, type PageShortcut } from "./shortcuts";
 import "./shortcuts.css";
 
@@ -15,6 +15,18 @@ interface KeyboardControllerProps {
 
 export function KeyboardController({ busy, canApply, canUndo, onNavigate, onChooseFolder, onPreview, onApply, onUndo }: KeyboardControllerProps) {
   const [showHelp, setShowHelp] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!showHelp) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => {
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    };
+  }, [showHelp]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -51,8 +63,8 @@ export function KeyboardController({ busy, canApply, canUndo, onNavigate, onChoo
   if (!showHelp) return null;
 
   return <div className="shortcut-backdrop" role="presentation" onMouseDown={() => setShowHelp(false)}>
-    <section className="shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" onMouseDown={event => event.stopPropagation()}>
-      <div className="panel-head"><div><p className="eyebrow">Keyboard first</p><h2 id="shortcut-title">Quick actions</h2></div><button onClick={() => setShowHelp(false)} aria-label="Close keyboard shortcuts">Close</button></div>
+    <section className="shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" aria-describedby="shortcut-help-note" onMouseDown={event => event.stopPropagation()}>
+      <div className="panel-head"><div><p className="eyebrow">Keyboard first</p><h2 id="shortcut-title">Quick actions</h2></div><button ref={closeButtonRef} onClick={() => setShowHelp(false)} aria-label="Close keyboard shortcuts">Close</button></div>
       <dl className="shortcut-list">
         <div><dt>Alt + 1…7</dt><dd>Open Organize, Rules, Duplicates, Automation, History, Settings, or About.</dd></div>
         <div><dt>Ctrl/⌘ + O</dt><dd>Choose the working folder.</dd></div>
@@ -62,7 +74,7 @@ export function KeyboardController({ busy, canApply, canUndo, onNavigate, onChoo
         <div><dt>Shift + ?</dt><dd>Show this shortcut reference.</dd></div>
         <div><dt>Escape</dt><dd>Close this shortcut reference.</dd></div>
       </dl>
-      <p className="hint">Shortcuts are disabled while focus is inside an input, textarea, select, or editable field so normal editing keys keep working.</p>
+      <p className="hint" id="shortcut-help-note">Shortcuts are disabled while focus is inside an input, textarea, select, or editable field so normal editing keys keep working.</p>
     </section>
   </div>;
 }
