@@ -28,7 +28,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 - BLAKE3 duplicate-candidate detection with size pre-filtering, parallel hashing, hidden-folder controls, and no auto-delete.
 - Watched folders with user-controlled presets and intervals while SortSmith is running.
 - Native JSON settings backup/restore with schema validation and local undo-history preservation.
-- Keyboard-first quick actions for navigation, folder selection, preview, apply, and undo; press `Shift+?` in the app for the reference.
+- Keyboard-first quick actions for navigation, folder selection, preview, apply, and undo; press `Shift+?` in the app for the reference. See [`docs/keyboard-shortcuts.md`](docs/keyboard-shortcuts.md).
 - Bounded, durable local settings persistence and rotating privacy-safe operation logs.
 - Light, dark, and system themes; keyboard focus states; reduced-motion preference.
 - Permission failures are isolated as recoverable errors where possible.
