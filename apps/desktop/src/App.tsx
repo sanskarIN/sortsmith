@@ -71,9 +71,13 @@ function App() {
   }, []);
 
   async function persist(next: AppStateData) {
+    const normalized = upgradeBundledPresets(next);
     try {
-      await backend.saveState(next);
-      setState(next);
+      await backend.saveState(normalized.state);
+      setState(normalized.state);
+      if (normalized.missingPresetCount > 0) {
+        setMessage(`${normalized.missingPresetCount} bundled preset pack(s) could not be added because the saved preset limit is already full.`);
+      }
     } catch (error) {
       setMessage(`The change could not be saved, so the previous settings remain active. ${String(error)}`);
     }
