@@ -176,19 +176,66 @@ impl Default for AppStateData {
     }
 }
 
+const EVERYDAY_PRESET_ID: &str = "11111111-1111-4111-8111-111111111101";
+const MEDIA_PRESET_ID: &str = "11111111-1111-4111-8111-111111111102";
+const DEVELOPER_PRESET_ID: &str = "11111111-1111-4111-8111-111111111103";
+const DOWNLOADS_PRESET_ID: &str = "11111111-1111-4111-8111-111111111104";
+
 pub fn default_presets() -> Vec<Preset> {
-    vec![Preset {
-        id: Uuid::new_v4(),
-        name: "Everyday tidy".into(),
-        description: "Sort common documents, images, archives, audio, and video into clear folders.".into(),
-        rules: vec![
-            extension_rule("Images", &["jpg", "jpeg", "png", "gif", "webp", "svg", "heic"], "Images"),
-            extension_rule("Documents", &["pdf", "doc", "docx", "txt", "md", "rtf", "odt", "xls", "xlsx", "ppt", "pptx"], "Documents"),
-            extension_rule("Archives", &["zip", "7z", "rar", "tar", "gz", "bz2", "xz"], "Archives"),
-            extension_rule("Audio", &["mp3", "wav", "flac", "m4a", "aac", "ogg"], "Audio"),
-            extension_rule("Video", &["mp4", "mkv", "mov", "webm", "avi", "m4v"], "Video"),
-        ],
-    }]
+    vec![
+        preset(
+            EVERYDAY_PRESET_ID,
+            "Everyday tidy",
+            "Sort common documents, images, archives, audio, and video into clear folders.",
+            vec![
+                extension_rule("Images", &["jpg", "jpeg", "png", "gif", "webp", "svg", "heic"], "Images"),
+                extension_rule("Documents", &["pdf", "doc", "docx", "txt", "md", "rtf", "odt", "xls", "xlsx", "ppt", "pptx"], "Documents"),
+                extension_rule("Archives", &["zip", "7z", "rar", "tar", "gz", "bz2", "xz"], "Archives"),
+                extension_rule("Audio", &["mp3", "wav", "flac", "m4a", "aac", "ogg"], "Audio"),
+                extension_rule("Video", &["mp4", "mkv", "mov", "webm", "avi", "m4v"], "Video"),
+            ],
+        ),
+        preset(
+            MEDIA_PRESET_ID,
+            "Media library",
+            "Group image, audio, and video files below a single Media folder.",
+            vec![
+                extension_rule("Media images", &["jpg", "jpeg", "png", "gif", "webp", "svg", "heic", "avif"], "Media/Images"),
+                extension_rule("Media audio", &["mp3", "wav", "flac", "m4a", "aac", "ogg", "opus"], "Media/Audio"),
+                extension_rule("Media video", &["mp4", "mkv", "mov", "webm", "avi", "m4v"], "Media/Video"),
+            ],
+        ),
+        preset(
+            DEVELOPER_PRESET_ID,
+            "Developer workspace",
+            "Separate common source, data/configuration, and package files for project staging folders.",
+            vec![
+                extension_rule("Source code", &["rs", "ts", "tsx", "js", "jsx", "py", "java", "kt", "swift", "go", "php", "cs", "cpp", "c", "h", "hpp"], "Development/Source"),
+                extension_rule("Data and configuration", &["json", "yaml", "yml", "toml", "xml", "csv", "ini", "env"], "Development/Data"),
+                extension_rule("Packages and archives", &["zip", "7z", "tar", "gz", "tgz", "bz2", "xz"], "Development/Packages"),
+            ],
+        ),
+        preset(
+            DOWNLOADS_PRESET_ID,
+            "Downloads cleanup",
+            "Tidy common downloads into installers, archives, documents, and images.",
+            vec![
+                extension_rule("Installers", &["exe", "msi", "msix", "dmg", "pkg", "deb", "rpm", "appimage"], "Installers"),
+                extension_rule("Downloaded archives", &["zip", "7z", "rar", "tar", "gz", "bz2", "xz"], "Archives"),
+                extension_rule("Downloaded documents", &["pdf", "doc", "docx", "txt", "md", "rtf", "odt", "xls", "xlsx", "ppt", "pptx"], "Documents"),
+                extension_rule("Downloaded images", &["jpg", "jpeg", "png", "gif", "webp", "svg", "heic", "avif"], "Images"),
+            ],
+        ),
+    ]
+}
+
+fn preset(id: &str, name: &str, description: &str, rules: Vec<Rule>) -> Preset {
+    Preset {
+        id: Uuid::parse_str(id).expect("bundled preset UUID must be valid"),
+        name: name.into(),
+        description: description.into(),
+        rules,
+    }
 }
 
 fn extension_rule(name: &str, values: &[&str], subdirectory: &str) -> Rule {
@@ -205,6 +252,7 @@ fn extension_rule(name: &str, values: &[&str], subdirectory: &str) -> Rule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn size_range_uses_frontend_camel_case_keys() {
@@ -224,5 +272,25 @@ mod tests {
             "max_bytes": 20
         })).unwrap();
         assert_eq!(criterion, RuleCriterion::SizeRange { min_bytes: Some(10), max_bytes: Some(20) });
+    }
+
+    #[test]
+    fn bundled_preset_ids_are_stable_and_unique() {
+        let first = default_presets();
+        let second = default_presets();
+        let first_ids = first.iter().map(|preset| preset.id).collect::<Vec<_>>();
+        let second_ids = second.iter().map(|preset| preset.id).collect::<Vec<_>>();
+        assert_eq!(first_ids, second_ids);
+        assert_eq!(first_ids.iter().copied().collect::<HashSet<_>>().len(), first_ids.len());
+    }
+
+    #[test]
+    fn bundled_preset_rules_are_valid() {
+        for preset in default_presets() {
+            assert!(!preset.rules.is_empty(), "{} should contain rules", preset.name);
+            for rule in preset.rules {
+                crate::rules::validate_rule(&rule).unwrap();
+            }
+        }
     }
 }
