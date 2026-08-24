@@ -1,15 +1,10 @@
 import { useMemo, useState } from "react";
+import { PresetManager } from "./PresetManager";
 import type { Action, AppStateData, Criterion, Rule } from "./types";
 
 type CriterionKind = Criterion["kind"];
 type ActionKind = Action["kind"];
-
-type CriterionDraft = {
-  id: string;
-  kind: CriterionKind;
-  primary: string;
-  secondary: string;
-};
+type CriterionDraft = { id: string; kind: CriterionKind; primary: string; secondary: string };
 
 interface RulesPageProps {
   state: AppStateData;
@@ -72,10 +67,8 @@ export function RulesPage({ state, persist }: RulesPageProps) {
         if (!values.length) throw new Error("MIME criteria need at least one prefix.");
         return { kind: "mimePrefix", values };
       }
-      case "modifiedOlderThanDays": {
-        const days = parseWholeNumber(primary, "Modified age");
-        return { kind: "modifiedOlderThanDays", days };
-      }
+      case "modifiedOlderThanDays":
+        return { kind: "modifiedOlderThanDays", days: parseWholeNumber(primary, "Modified age") };
       case "sizeRange": {
         if (!primary && !secondary) throw new Error("Size range needs a minimum, maximum, or both.");
         const minBytes = primary ? mibToBytes(primary, "Minimum size") : undefined;
@@ -83,11 +76,10 @@ export function RulesPage({ state, persist }: RulesPageProps) {
         if (minBytes !== undefined && maxBytes !== undefined && minBytes > maxBytes) throw new Error("Minimum size cannot be larger than maximum size.");
         return { kind: "sizeRange", minBytes, maxBytes };
       }
-      case "nameRegex": {
+      case "nameRegex":
         if (!primary) throw new Error("Filename pattern cannot be empty.");
         try { new RegExp(primary); } catch { throw new Error("Filename pattern is not a valid regular expression."); }
         return { kind: "nameRegex", pattern: primary };
-      }
     }
   }
 
@@ -137,7 +129,13 @@ export function RulesPage({ state, persist }: RulesPageProps) {
 
   async function duplicateRule(rule: Rule) {
     const customBase = state.rules.length ? state.rules : presetRules;
-    const copy: Rule = { ...rule, id: crypto.randomUUID(), name: `${rule.name} copy`, criteria: rule.criteria.map(criterion => ({ ...criterion })) as Criterion[] };
+    const copy: Rule = {
+      ...rule,
+      id: crypto.randomUUID(),
+      name: `${rule.name} copy`,
+      criteria: rule.criteria.map(criterion => criterion.kind === "extension" || criterion.kind === "mimePrefix" ? { ...criterion, values: [...criterion.values] } : { ...criterion }) as Criterion[],
+      action: { ...rule.action },
+    };
     await persist({ ...state, rules: [...customBase, copy] });
   }
 
@@ -170,6 +168,8 @@ export function RulesPage({ state, persist }: RulesPageProps) {
       </div>
       {error && <p className="hint" role="alert">{error}</p>}
     </div>
+
+    <PresetManager state={state} effectiveRules={effectiveRules} persist={persist}/>
 
     <div className="panel">
       <div className="panel-head"><div><h3>Active rules</h3><p>{sourceLabel}</p></div>{state.rules.length > 0 && <button onClick={() => void persist({ ...state, rules: [] })}>Reset to default preset</button>}</div>
