@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { backend } from "./api";
 import { AutomationPage } from "./AutomationPage";
+import { BUNDLED_PRESET_IDS, upgradeBundledPresets } from "./bundledPresets";
 import { chooseFolder } from "./dialogs";
 import { HistoryPage } from "./HistoryPage";
 import { strings } from "./i18n";
@@ -26,10 +27,35 @@ function App() {
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Ready. No files are changed until you apply a preview.");
-  const activeRules = useMemo(() => state.rules.length ? state.rules : state.presets[0]?.rules ?? [], [state]);
+  const activeRules = useMemo(() => {
+    if (state.rules.length) return state.rules;
+    return state.presets.find(preset => preset.id === BUNDLED_PRESET_IDS.everyday)?.rules ?? state.presets[0]?.rules ?? [];
+  }, [state]);
 
   useEffect(() => {
-    backend.loadState().then(setState).catch(() => setMessage("Could not load saved settings. Safe defaults are active."));
+    let cancelled = false;
+    backend.loadState().then(async loaded => {
+      const upgrade = upgradeBundledPresets(loaded);
+      if (upgrade.changed) {
+        try {
+          await backend.saveState(upgrade.state);
+        } catch {
+          if (!cancelled) {
+            setState(loaded);
+            setMessage("Saved settings loaded, but the bundled preset catalog could not be upgraded. Existing settings remain unchanged.");
+          }
+          return;
+        }
+      }
+      if (cancelled) return;
+      setState(upgrade.state);
+      if (upgrade.missingPresetCount > 0) {
+        setMessage(`${upgrade.missingPresetCount} bundled preset pack(s) could not be added because the saved preset limit is already full.`);
+      }
+    }).catch(() => {
+      if (!cancelled) setMessage("Could not load saved settings. Safe defaults are active.");
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
