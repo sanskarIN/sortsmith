@@ -10,7 +10,7 @@
 
 SortSmith is an offline-first desktop file organizer built with **Rust + Tauri + React**. It previews changes before touching the filesystem, records reversible operation journals, detects duplicate candidates by content hash without deleting them, and can run user-controlled watched-folder rules while the app is open.
 
-> **Development status:** the `0.1.0` implementation baseline is in place. Do not treat it as a published release until cross-platform CI, clean installer smoke tests, and the release checklist are green.
+> **Development status:** source metadata is prepared for the `0.2.0` release candidate. Do not treat `v0.2.0` as publishable until required CI is green, both dependency lockfiles are committed and verified, cross-platform installer smoke tests pass, verified screenshots are captured, and required signing/notarization is complete.
 
 ## Screenshots
 
@@ -20,7 +20,9 @@ Real release screenshots will be captured from verified release builds. Capture 
 
 - Rules by extension, MIME prefix, modified age, size range, and filename regex.
 - Multi-criterion rule builder with match-all/match-any behavior and reusable presets.
-- Saved user presets: snapshot active rules, load them later, edit custom preset metadata, and safely delete presets that are not used by watched folders.
+- Four protected bundled preset packs: Everyday tidy, Media library, Developer workspace, and Downloads cleanup.
+- Backward-compatible migration of the legacy Everyday tidy preset ID, including watched-folder reference remapping.
+- Saved user presets: snapshot active rules, load them later, edit custom preset metadata, and safely delete presets that are not used by watched folders. See [`docs/presets.md`](docs/presets.md).
 - Native folder picker plus typed-path fallback.
 - Dry-run previews with source/destination visibility before any change.
 - Collision-safe moving and renaming with cross-platform filename validation.
@@ -29,6 +31,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 - Watched folders with user-controlled presets and intervals while SortSmith is running.
 - Native JSON settings backup/restore with schema validation and local undo-history preservation.
 - Keyboard-first quick actions for navigation, folder selection, preview, apply, and undo; press `Shift+?` in the app for the reference. See [`docs/keyboard-shortcuts.md`](docs/keyboard-shortcuts.md).
+- Shortcut-help focus moves into the dialog and returns to the previously focused control when the dialog closes.
 - Bounded, durable local settings persistence and rotating privacy-safe operation logs.
 - Light, dark, and system themes; keyboard focus states; reduced-motion preference.
 - Permission failures are isolated as recoverable errors where possible.
@@ -82,19 +85,25 @@ CI separately exercises the core crate, Tauri desktop host, and frontend so fail
 
 ## Build and release
 
+Development builds may continue using normal package-manager resolution until the lockfiles are generated. A release tag is fail-closed and requires committed lockfiles.
+
+Before creating the `v0.2.0` tag from the repository root:
+
 ```bash
+node scripts/verify-release-version.mjs v0.2.0
+node scripts/verify-release-lockfiles.mjs
+```
+
+After `Cargo.lock` and `apps/desktop/package-lock.json` exist and have been reviewed:
+
+```bash
+cargo fetch --locked
 cd apps/desktop
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run tauri build
 ```
 
-Before creating a version tag, verify that Cargo, frontend, and Tauri metadata all match:
-
-```bash
-node scripts/verify-release-version.mjs v0.1.0
-```
-
-Packaging is automated by `.github/workflows/release.yml` for `v*` tags and repeats the version check before building on Windows, macOS, and Linux. Release guidance is in [`docs/release.md`](docs/release.md).
+Packaging is automated by `.github/workflows/release.yml` for `v*` tags. The workflow rechecks release metadata and lockfiles before building on Windows, macOS, and Linux, and creates a draft GitHub Release rather than publishing unverified artifacts automatically. Release guidance is in [`docs/release.md`](docs/release.md).
 
 ## Architecture
 
