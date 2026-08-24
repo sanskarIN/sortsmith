@@ -1,0 +1,4 @@
+.shortcut-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.42);backdrop-filter:blur(4px)}
+.shortcut-dialog{width:min(680px,100%);max-height:min(760px,calc(100vh - 40px));overflow:auto;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px}
+.shortcut-dialog h2{margin:4px 0 0}.shortcut-list{display:grid;gap:0;margin:18px 0}.shortcut-list div{display:grid;grid-template-columns:minmax(150px,.7fr) 1.6fr;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}.shortcut-list div:last-child{border-bottom:0}.shortcut-list dt{font-weight:750;color:var(--text)}.shortcut-list dd{margin:0;color:var(--muted);line-height:1.45}
+@media(max-width:560px){.shortcut-backdrop{padding:10px}.shortcut-dialog{padding:16px}.shortcut-list div{grid-template-columns:1fr;gap:5px}}
