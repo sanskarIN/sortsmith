@@ -22,11 +22,14 @@ describe("preset helpers", () => {
   });
 
   it("normalizes preset metadata and clones rules", () => {
-    const preset = createPreset("  Photos  ", "  Camera files  ", [rule]);
+    const source = [rule];
+    const preset = createPreset("  Photos  ", "  Camera files  ", source);
     expect(preset.name).toBe("Photos");
     expect(preset.description).toBe("Camera files");
-    expect(preset.rules).toEqual([rule]);
-    expect(preset.rules).not.toBe([rule]);
+    expect(preset.rules).toEqual(source);
+    expect(preset.rules).not.toBe(source);
+    expect(preset.rules[0]).not.toBe(source[0]);
+    expect(preset.rules[0].criteria).not.toBe(source[0].criteria);
   });
 
   it("rejects empty presets", () => {
@@ -40,5 +43,6 @@ describe("preset helpers", () => {
     expect(renamed.name).toBe("Media");
     expect(renamed.description).toBe("Updated");
     expect(renamed.rules).toEqual(preset.rules);
+    expect(renamed.rules).not.toBe(preset.rules);
   });
 });
