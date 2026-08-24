@@ -7,7 +7,7 @@ function fail(message) {
 
 function normalizedTag(raw) {
   const value = raw?.trim();
-  if (!value) fail("provide a version argument or GITHUB_REF_NAME");
+  if (!value) return null;
   const version = value.startsWith("v") ? value.slice(1) : value;
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     fail(`'${value}' is not a supported release tag`);
@@ -22,20 +22,23 @@ function workspaceVersion(cargoToml) {
   return version;
 }
 
-const expected = normalizedTag(process.argv[2] ?? process.env.GITHUB_REF_NAME);
 const frontend = JSON.parse(readFileSync(new URL("../apps/desktop/package.json", import.meta.url), "utf8"));
 const tauri = JSON.parse(readFileSync(new URL("../apps/desktop/src-tauri/tauri.conf.json", import.meta.url), "utf8"));
 const cargo = readFileSync(new URL("../Cargo.toml", import.meta.url), "utf8");
+const cargoVersion = workspaceVersion(cargo);
+const requested = normalizedTag(process.argv[2] ?? (process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : undefined));
+const expected = requested ?? cargoVersion;
 
 const versions = new Map([
-  ["workspace Cargo.toml", workspaceVersion(cargo)],
+  ["workspace Cargo.toml", cargoVersion],
   ["desktop package.json", frontend.version],
   ["Tauri configuration", tauri.version],
 ]);
 
 const mismatches = [...versions].filter(([, version]) => version !== expected);
 if (mismatches.length > 0) {
-  fail(`tag v${expected} does not match ${mismatches.map(([name, version]) => `${name} (${version ?? "missing"})`).join(", ")}`);
+  const prefix = requested ? `tag v${expected}` : `workspace version ${expected}`;
+  fail(`${prefix} does not match ${mismatches.map(([name, version]) => `${name} (${version ?? "missing"})`).join(", ")}`);
 }
 
-console.log(`Release version v${expected} is consistent across Cargo, frontend, and Tauri metadata.`);
+console.log(`Release version ${expected} is consistent across Cargo, frontend, and Tauri metadata${requested ? ` for tag v${expected}` : ""}.`);
