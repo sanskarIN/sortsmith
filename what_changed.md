@@ -2,214 +2,388 @@
 
 ## Current version / milestone
 
-- Version: `0.1.0`
+- Version prepared in source: `0.2.0`
+- Intended next tag: `v0.2.0`
 - Date: 2026-08-24
 - Repository: `https://github.com/sanskarIN/sortsmith`
 - Default branch: `main`
 - Visibility/source model: public, open source
 - License: Apache-2.0
-- Current milestone: the safe desktop implementation baseline and the planned 0.2 keyboard-polish work are implemented in source. The 0.3 saved-preset, property-test, and benchmark foundations are also implemented. Release publication is still intentionally blocked on real green CI evidence, committed dependency lockfiles, clean installer smoke tests, real verified screenshots, and signing/notarization where required.
+- Current milestone: 0.2 Desktop Polish source work is substantially implemented and release metadata is prepared. The repository is **not yet approved for public release** because dependency lockfiles, actual green platform CI evidence, clean installer smoke tests, verified screenshots, and signing/notarization decisions remain outstanding.
 
-## Completed implementation baseline
+## Work completed in this continuation
 
-### Rust core
+### 1. Prepared version 0.2.0 consistently
 
-- Platform-neutral `sortsmith-core` crate.
-- Rule criteria for extension, MIME prefix, modified age, size range, and filename regex.
-- Move-to-folder, filename-prefix, and rename-template actions.
-- Rule validation with portable filename rules, reserved Windows device-name rejection, path-separator rejection, traversal rejection, and bounded rule shapes.
-- Dry-run organization planning with collision-safe destinations.
-- Reserved planned destinations are considered while planning, preventing two operations in one preview from selecting the same destination.
-- Root containment checks for planned execution paths.
-- Filesystem execution with cross-device fallback.
-- Reversible JSON undo journals and reverse-order undo.
-- Journal preflight before the first mutation so execution does not begin if undo storage cannot be initialized safely.
-- Duplicate candidate discovery with size pre-filtering, BLAKE3 hashing, parallel candidate hashing, hidden-directory pruning, and no automatic deletion.
-- Streamed journal I/O and bounded local persistence behavior.
+The three authoritative version sources now all use `0.2.0`:
 
-### Desktop/Tauri boundary
+- workspace `Cargo.toml`
+- `apps/desktop/package.json`
+- `apps/desktop/src-tauri/tauri.conf.json`
 
-- Schema-versioned local application state.
-- Built-in preset plus custom rules, saved presets, watched folders, settings, and recent journal identifiers.
-- Native folder picker.
-- Native JSON settings export/import dialogs.
-- Journal-history listing and selective undo UI support.
-- Watched-folder scheduling while the application is open.
-- Root canonicalization and operation containment validation repeated at the Tauri boundary.
-- Destination-parent symlink escape checks.
-- State validation limits for rules, presets, watched folders, and recent journals.
-- State file size limit, regular-file checks, symlink rejection, and atomic JSON replacement.
-- Privacy-oriented structured operation logging with counts/identifiers only, rotating at a bounded size.
+The About page no longer contains its own hard-coded release number. It imports `package.json` and renders `packageMetadata.version`, removing a fourth version value that could drift from the release metadata checked by CI.
 
-### React/TypeScript frontend
+The package JSON import shape was independently checked with the available local TypeScript compiler using the project's JSON-module-compatible compiler settings.
 
-- Responsive desktop shell with Organize, Rules, Duplicates, Automation, History, Settings, and About sections.
-- Light, dark, and system themes.
-- Reduced-motion preference and visible focus states.
-- Live operation status messages.
-- Native folder selection, dry-run preview, apply, latest undo, duplicate scan, selective history undo, settings backup/import, automation management, and support/about links.
-- Rejected persisted state changes remain inactive if the backend save fails.
-- Rule builder with match-all/match-any behavior and all supported criterion/action kinds.
-- Saved user-defined preset management:
-  - snapshot the active rule set into a custom preset;
-  - load any saved preset into the active rule set;
-  - edit custom preset name/description;
-  - delete custom presets only when no watched folder references them;
-  - preserve independent rule snapshots rather than retaining shared mutable arrays.
-- Keyboard-first quick actions:
-  - `Alt+1` through `Alt+7` for primary navigation;
-  - `Ctrl/Cmd+O` to choose a folder;
-  - `Ctrl/Cmd+Enter` to run a dry-run preview;
-  - `Ctrl/Cmd+Shift+Enter` to apply an available preview;
-  - `Ctrl/Cmd+Z` to undo the latest available operation;
-  - `Shift+?` to open the shortcut reference;
-  - `Escape` to close the shortcut reference.
-- Shortcut handling does not intercept keys while focus is in input, textarea, select, or content-editable controls.
-- Shortcut apply/undo paths call the same application functions as visible controls and therefore retain normal busy-state, availability, and confirmation rules.
+### 2. Added a stable bundled preset catalog
 
-## Verification and quality work added in the latest continuation
+The previous build had one built-in `Everyday tidy` preset whose UUID was generated randomly. That made it impossible to identify bundled presets robustly across installations and made the previous frontend assumption of “preset at index 0 is built-in” fragile.
 
-### Frontend tests
+Version 0.2 now defines stable bundled preset UUIDs and ships four built-in packs:
 
-- Preset snapshots are tested for value equality and reference independence.
-- Nested criterion arrays are verified to be cloned rather than shared.
-- Empty preset creation is rejected.
-- Preset metadata rename preserves the preset identifier while cloning its rule snapshot.
-- Keyboard shortcut resolution is tested for Windows/Linux-style Control and macOS-style Command modifiers.
-- Alt-number navigation is tested.
-- Editing targets are verified not to receive application shortcut interception.
-- Shortcut-help resolution is tested.
+1. `Everyday tidy`
+   - Images
+   - Documents
+   - Archives
+   - Audio
+   - Video
+2. `Media library`
+   - `Media/Images`
+   - `Media/Audio`
+   - `Media/Video`
+3. `Developer workspace`
+   - `Development/Source`
+   - `Development/Data`
+   - `Development/Packages`
+4. `Downloads cleanup`
+   - Installers
+   - Archives
+   - Documents
+   - Images
 
-### Rust property tests
+Fresh Rust default state now contains those four presets with stable preset IDs. Bundled rule definitions continue to use normal validated SortSmith rule models, so they go through the same path/subdirectory validation as user-created rules.
 
-`crates/sortsmith-core/tests/properties.rs` now uses Proptest to exercise generated cases for:
+### 3. Added backward-compatible bundled-preset migration
 
-- size-range criterion JSON serialization/deserialization round trips;
-- safe relative subdirectories remaining below the supplied root;
-- parent traversal inputs remaining rejected;
-- generated portable ASCII filenames passing portable filename validation;
-- generated rename templates preserving `.txt` extension behavior while staying under the root.
+`apps/desktop/src/bundledPresets.ts` contains the frontend compatibility layer for existing 0.1 state.
 
-These property tests run through the normal core test suite.
+The migration behavior is deliberately non-destructive:
 
-### Performance benchmarks
+- if the stable `Everyday tidy` ID already exists, no legacy-ID migration is needed;
+- otherwise, an existing legacy preset named `Everyday tidy` is preserved and assigned the new stable bundled ID;
+- its existing rule snapshot is preserved instead of being replaced silently;
+- watched-folder entries referencing the old random preset ID are remapped to the stable ID;
+- other missing bundled packs are appended while capacity remains;
+- the application never removes user presets to make room for bundled packs;
+- the backend 50-preset limit is respected;
+- if the catalog cannot be completed because all preset slots are used, the UI reports the number of missing bundled packs.
 
-`crates/sortsmith-core/benches/planning.rs` now provides Criterion targets for:
+The normalization runs both during initial state loading and before every persisted state write. This means an imported legacy settings backup is upgraded immediately through the existing `persist(...)` path instead of waiting for an application restart.
 
-- organization planning across synthetic fixture sets of 100, 1,000, and 5,000 files;
-- duplicate hashing across 100 and 1,000 candidates grouped into repeated-content buckets.
+The persisted state schema remains version `1`; no incompatible schema bump was needed because stable bundled UUIDs are valid normal preset identifiers in the existing schema.
 
-The benchmark fixtures are temporary and isolated. They do not read personal directories. The intended comparison command is:
+### 4. Hardened preset management semantics
 
-```bash
-cargo bench -p sortsmith-core --bench planning
-```
+`PresetManager.tsx` no longer treats `state.presets[0]` as the only protected built-in preset.
 
-Timing results must be compared on the same machine/toolchain; shared CI timing is not treated as a stable performance guarantee. CI Clippy uses `--all-targets`, so the benchmark source is still compiled as part of the Rust quality path.
+Bundled preset protection is now based on stable bundled IDs:
 
-## Documentation updated in this continuation
+- all four bundled presets can be loaded;
+- bundled presets cannot be renamed;
+- bundled presets cannot be deleted;
+- custom presets remain editable;
+- custom presets remain undeletable while a watched folder references them;
+- users can customize a bundled pack by loading it, editing active rules, and saving the active rule set as a new user preset.
 
-- `README.md` now documents saved presets, keyboard quick actions, property coverage, Criterion benchmarks, and links the keyboard shortcut reference.
-- `CHANGELOG.md` records saved presets, keyboard actions, property tests, benchmarks, accessibility changes, and watched-folder preset deletion protection.
-- `ROADMAP.md` now marks keyboard quick actions, saved user preset management, property coverage, and benchmark foundations as complete without falsely marking additional curated built-in preset packs complete.
-- `docs/performance.md` documents the repeatable benchmark targets and measurement rules.
-- `docs/testing.md` documents property testing, shortcut/preset tests, and the benchmark verification command.
-- `docs/development.md` documents benchmark workflow and the design boundaries for shortcut/preset changes.
-- `docs/accessibility.md` documents keyboard-first interaction and remaining manual platform accessibility checks.
-- `docs/keyboard-shortcuts.md` is the full shortcut/safety reference.
-- This `what_changed.md` has been rewritten to reflect the actual current repository instead of older limitations that had already been completed by later commits.
+This preserves a recoverable built-in library without preventing user customization.
 
-## Current repository quality/release automation
+### 5. Expanded bundled-preset tests
 
-- GitHub Actions CI separates core Rust, desktop Rust/Tauri, and frontend jobs.
-- Rust CI checks formatting, Clippy, core tests, desktop host checks/Clippy/tests, and now compiles property/benchmark targets through the configured test/all-target paths.
-- Frontend CI installs dependencies, typechecks, runs Vitest, and produces a Vite build.
-- CodeQL covers TypeScript and Rust.
-- Dependabot is configured.
-- Tag-driven release automation targets Windows, macOS, and Linux.
-- Release metadata verification prevents a version tag from silently disagreeing with Cargo, frontend package metadata, or Tauri configuration.
+`apps/desktop/src/bundledPresets.test.ts` covers:
 
-## Dependency reproducibility status
+- unique stable bundled preset identifiers;
+- rule-ID uniqueness within each bundled preset;
+- adding missing bundled packs while preserving custom presets;
+- migration of the legacy random `Everyday tidy` ID;
+- watched-folder reference remapping during migration;
+- preservation of the legacy preset rule snapshot;
+- no-op behavior when the catalog is already complete;
+- preservation of the backend 50-preset capacity limit without deleting user data.
 
-The repository still does **not** contain:
+The bundled-preset helper was also checked independently with strict local TypeScript type checking using the TypeScript compiler available in this environment.
+
+### 6. Expanded Rust default-preset verification
+
+`crates/sortsmith-core/src/models.rs` now provides the four bundled presets in new/default application state.
+
+Core tests now verify:
+
+- bundled preset IDs are stable across repeated `default_presets()` calls;
+- bundled preset IDs are unique;
+- every bundled rule passes the existing Rust rule validator.
+
+The Rust execution environment available in this chat still does not contain `rustc` or `cargo`, so these tests have not been claimed as locally executed. They must run in GitHub Actions or another trusted Rust environment.
+
+### 7. Improved keyboard dialog accessibility
+
+The shortcut dialog already had labelled modal semantics and Escape dismissal. Version 0.2 now also manages focus explicitly:
+
+- when the shortcut reference opens, focus moves to its Close button;
+- the dialog exposes descriptive text through `aria-describedby`;
+- when the dialog closes, focus returns to the element that was active before the dialog opened;
+- previous focus state is cleared after restoration.
+
+This avoids leaving keyboard users at the document body after dismissing shortcut help.
+
+Real platform accessibility checks are still required before release.
+
+### 8. Strengthened continuous release-version verification
+
+`scripts/verify-release-version.mjs` now supports two modes:
+
+- **CI/development mode** with no tag argument: it uses the workspace Cargo version as the expected version and verifies that frontend and Tauri metadata agree;
+- **release-tag mode** with `vX.Y.Z`: it additionally verifies the exact requested tag.
+
+The frontend CI job now runs the no-tag synchronization check before dependency installation/typecheck/tests/build.
+
+The release version script was behavior-checked locally with isolated metadata fixtures:
+
+- aligned `0.2.0` metadata passed in no-tag mode;
+- aligned `v0.2.0` passed in tag mode;
+- stale `v0.1.0` correctly failed against 0.2.0 metadata.
+
+### 9. Added fail-closed release lockfile verification
+
+New script: `scripts/verify-release-lockfiles.mjs`.
+
+The script requires:
 
 - `Cargo.lock`
 - `apps/desktop/package-lock.json`
 
-Both paths were explicitly checked on 2026-08-24 and GitHub returned them as absent. This remains a release blocker. They must be generated in a trusted networked Rust/Node environment, reviewed, committed, and then CI/release installation should move to lockfile-enforcing commands such as `cargo ... --locked` and `npm ci`.
+It also checks:
 
-Do not hand-author either lockfile. They must be produced by the corresponding package manager from the committed manifests.
+- npm lockfile format is modern enough for the supported npm line;
+- the npm root package version matches `package.json`;
+- the Cargo lockfile contains both workspace packages (`sortsmith` and `sortsmith-core`);
+- both workspace package versions in `Cargo.lock` match the frontend release version.
 
-## Verification limitations of this continuation environment
+The script was syntax-checked with Node.js 22.16.0 and behavior-checked locally with isolated fixtures:
 
-- Repository reads/writes and commits were performed through the connected GitHub integration with push/admin access to `sanskarIN/sortsmith`.
-- This continuation did not obtain a local checkout with working dependency resolution, so it does not claim a locally executed Rust compile, Clippy pass, Vitest pass, frontend build, Tauri build, installer build, or Criterion timing result.
-- The source and workflow definitions were reviewed directly in the repository, but release readiness must be based on actual GitHub Actions/platform build results rather than inferred success.
-- Signing/notarization cannot be completed safely without platform credentials stored outside Git.
-- Real release screenshots and clean installer smoke tests require verified platform builds.
+- it correctly failed when `Cargo.lock` was absent;
+- it correctly passed with structurally valid test lockfiles aligned at `0.2.0`.
 
-## Remaining work / next exact tasks
+The test lockfiles used for script verification were temporary local fixtures only. They were **not** committed and are not substitutes for package-manager-generated project lockfiles.
 
-1. Inspect the newest GitHub Actions run for the latest `main` commit and fix every real compile, lint, test, or build failure reported by the runners. Do not mark this complete until the required checks are actually green.
-2. From a trusted networked environment with the supported Rust/Node toolchains, generate and commit `Cargo.lock` and `apps/desktop/package-lock.json`.
-3. Change frontend CI/release installation from `npm install` to `npm ci` after the npm lockfile exists, and use Cargo `--locked` in release-sensitive commands after `Cargo.lock` exists.
-4. Run `cargo bench -p sortsmith-core --bench planning` on a consistent development machine and record a baseline before implementing the incremental scan cache.
-5. Design and implement the incremental scan cache with explicit invalidation rules; verify its correctness against the uncached planner and demonstrate a benchmark improvement before enabling it by default.
-6. Add additional curated built-in preset packs only after their behavior is validated. Saved user-defined preset management is already implemented.
-7. Expand integration/accessibility testing on Windows, macOS, and Linux, including keyboard shortcut conflicts, modal focus behavior, native dialogs, permissions, symlinks, Unicode paths, long paths where supported, and installer launch/uninstall behavior.
-8. Implement native background scheduling only with explicit platform consent, clear startup behavior, and least-privilege filesystem access. The current watched-folder scheduler intentionally runs only while SortSmith is open.
-9. Capture real release screenshots from verified builds and replace the placeholder screenshot state.
-10. Configure signing/notarization credentials outside Git, run clean-checkout installer smoke tests on every distributed platform, and only then create the first release tag.
+### 10. Hardened the tag-driven release workflow
 
-## Known limitations that are intentionally still open
+`.github/workflows/release.yml` now performs these gates before Tauri packaging:
 
-- Watched folders are app-lifetime automation, not native OS background scheduling.
-- Incremental scan caching is not implemented yet.
-- Additional curated built-in preset packs are not implemented yet; user-created saved presets are implemented.
-- Cross-platform accessibility/integration coverage still needs real platform execution.
-- Real release screenshots are not yet captured.
-- Signing/notarization and clean installer smoke tests are not yet completed.
-- Dependency lockfiles are not yet committed.
-- The first public release tag must not be treated as ready until the required CI/platform evidence is green.
+1. exact tag/version verification;
+2. committed lockfile verification;
+3. `cargo fetch --locked`;
+4. Linux Tauri dependency installation when applicable;
+5. frontend dependency installation with `npm ci --no-audit --no-fund`;
+6. Tauri cross-platform draft packaging.
 
-## Obsolete limitations removed from the old handoff
+A tag created before real lockfiles are committed will fail closed instead of silently resolving an unreviewed dependency graph.
 
-The previous handoff still claimed several items were missing even though subsequent repository work had already implemented them. Those stale notes have now been removed. The current repository already contains:
+The release continues to create draft artifacts rather than automatically publishing unverified installers.
 
-- native folder picker support;
-- native settings import/export dialogs;
-- journal-history/selective undo UI;
-- hardened execution/journal preflight behavior;
-- current persistence/security documentation.
+### 11. Added explicit 0.2.0 release evidence documentation
 
-## Latest continuation commits (2026-08-24)
+New file: `docs/release-evidence-0.2.0.md`.
 
-1. `aacc4699d45ea6068dcc3105a52b4031ceaf55eb` — `feat(frontend): add preset management helpers`
-2. `d64123991d0bbe6768c3751c2ca03be9cc00d27a` — `test(frontend): cover preset helper behavior`
-3. `d4f1c1b7b5c9d6784aa35d8748fe9af8829dbc10` — `feat(frontend): add saved preset manager`
-4. `70278792e04911289bff4f2dac0ea04f41da9b94` — `feat(frontend): integrate saved preset workflows`
-5. `5dd38d3210dceebd05502b46ef3a8a22d1dd55e7` — `build(core): add property and benchmark dependencies`
-6. `957d6ccc210038733185299ceef3ed099298e3c4` — `build(core): register property tests and benchmarks`
-7. `14253da376420d7d74c3092e6969201536d51b77` — `test(core): add serialization and path property coverage`
-8. `e883ebce2270229f7d5aedc5d47f9ac0f4e52a85` — `test(core): keep generated filenames cross-platform safe`
-9. `0e7b2721d7ea6b5ee1feaf72ed1245dd0c55f7e7` — `perf(core): benchmark planning and duplicate hashing`
-10. `69ef05c48ab7d89d1720cd971d9bcc0cdfa66f66` — `feat(frontend): define keyboard quick actions`
-11. `12ce3a9137a45fed84c259909439309cb6098210` — `test(frontend): cover keyboard quick actions`
-12. `3a03fa72df648b50fd5f682a15784017e64a60d7` — `feat(frontend): add keyboard shortcut controller`
-13. `aa28b421a401b8568e391bd5085e43c9d0e799b0` — `style(frontend): add shortcut help dialog`
-14. `654de0e62e25b26751a7f6b686712e322803251d` — `style(frontend): load shortcut dialog styles`
-15. `40e99645ea0d80d4bfc608217a4e534505cbccca` — `feat(frontend): wire keyboard-first organizer actions`
-16. `93597e2c49a1d42ce495d37206b30534438840b7` — `docs(performance): document repeatable benchmark targets`
-17. `22bd22f10bcc4d99723e83b6a119668ca7ed5daf` — `docs(testing): add property and benchmark verification`
-18. `41aa7a9f80571bd6dc6263a38538aa9754e0f835` — `test(frontend): assert preset snapshots are independent`
-19. `f15e5cdde8583a05799d82bbaa4d05fb2357af95` — `docs(roadmap): mark delivered polish and verification work`
-20. `d3ed45ddd67461437591ece04a60c3c934842940` — `docs(changelog): record presets shortcuts properties and benchmarks`
-21. `fb9299417cc7aaac773bfd4342af93c6aa6bc632` — `docs(readme): expose presets shortcuts and benchmarks`
-22. `7b85fdafaa67f34b41b8a0474c5d9f0f53597018` — `docs(frontend): document keyboard quick actions`
-23. `922d6e4d4bd1678f84a6b7d5d496e9f8a7ddface` — `docs(accessibility): cover keyboard-first interaction`
-24. `44193eec6f755285a9f86da1608141c798693017` — `docs(development): add benchmark and shortcut workflow`
-25. `d58d6ec9020226b35a4a0603d15f0f9145613955` — `docs(readme): link keyboard shortcut reference`
+It contains an evidence template for:
+
+- candidate SHA/tag identity;
+- CI and CodeQL status;
+- lockfile reproducibility;
+- Rust/frontend quality commands;
+- benchmark environment;
+- Windows installer verification;
+- macOS installer/signing/notarization verification;
+- Linux package verification;
+- keyboard/accessibility checks;
+- preset migration and bundled-preset checks;
+- real screenshot provenance;
+- final BLOCKED/APPROVED decision.
+
+The file is intentionally a blank verification template and does not claim that platform tests have passed.
+
+### 12. Updated release-facing documentation
+
+Updated documents include:
+
+- `README.md`
+- `CHANGELOG.md`
+- `ROADMAP.md`
+- `PRIVACY.md`
+- `SECURITY.md`
+- `docs/architecture.md`
+- `docs/development.md`
+- `docs/testing.md`
+- `docs/accessibility.md`
+- `docs/github.md`
+- `docs/keyboard-shortcuts.md`
+- `docs/release.md`
+- `docs/screenshots/README.md`
+
+New documents include:
+
+- `docs/presets.md`
+- `docs/release-evidence-0.2.0.md`
+
+The documentation now distinguishes **prepared source version** from **verified public release** and no longer treats changing the version number as proof that 0.2.0 is shippable.
+
+## Current verification status
+
+### Checks actually performed in this continuation environment
+
+Available local tools detected:
+
+- Node.js `v22.16.0`
+- npm `10.9.2`
+- global TypeScript compiler `5.8.3`
+
+Unavailable local tools:
+
+- `rustc`
+- `cargo`
+
+Performed locally with isolated fixtures:
+
+- Node syntax check of `verify-release-version.mjs` logic;
+- Node syntax check of `verify-release-lockfiles.mjs`;
+- release-version guard success for aligned 0.2.0 metadata;
+- release-version guard failure for stale `v0.1.0`;
+- release-lockfile guard failure when lockfiles are absent;
+- release-lockfile guard success with structurally aligned temporary fixture lockfiles;
+- strict TypeScript check of bundled-preset migration/remapping helper structure;
+- TypeScript JSON-module import check matching the About-page package-version pattern.
+
+### Checks not claimed
+
+This continuation does **not** claim:
+
+- Rust formatting success;
+- Rust Clippy success;
+- Rust unit/property test success;
+- Tauri Rust compilation success;
+- full project TypeScript/Vitest success with the repository's pinned dependency graph;
+- Vite production build success;
+- native Tauri build success;
+- real Criterion timing results;
+- Windows/macOS/Linux installer success;
+- signing/notarization completion;
+- real screenshot completion.
+
+Those require the actual project dependencies/toolchains or target platforms.
+
+## GitHub status visibility
+
+The connected GitHub integration confirmed the repository remains public and this account retains push/admin permission.
+
+For the pre-handoff 0.2 candidate head, GitHub's combined-status endpoint returned no surfaced status contexts. A direct public Actions page fetch also did not provide usable run data in this environment. Therefore this file does **not** mark CI green. The next continuation must inspect actual workflow results when GitHub exposes them and fix any real failures before release.
+
+## Dependency reproducibility blocker
+
+The repository still does **not** contain package-manager-generated release lockfiles:
+
+- `Cargo.lock`
+- `apps/desktop/package-lock.json`
+
+This is now enforced by the release workflow itself.
+
+Do not hand-author either lockfile. Generate them from the committed manifests using the supported toolchains in a trusted networked environment, review them, and commit them before `v0.2.0`.
+
+After those files exist, ordinary CI should also be migrated from resolution-based installs to lockfile-enforcing commands where appropriate.
+
+## Remaining work before v0.2.0 can be published
+
+1. Inspect the latest GitHub Actions runs for the exact 0.2.0 candidate commit and fix every real format, Clippy, test, typecheck, build, or CodeQL failure.
+2. Generate `Cargo.lock` with Cargo from the current committed Rust manifests.
+3. Generate `apps/desktop/package-lock.json` with supported npm from the current committed frontend manifest.
+4. Review and commit both generated lockfiles.
+5. Run:
+
+   ```bash
+   node scripts/verify-release-version.mjs v0.2.0
+   node scripts/verify-release-lockfiles.mjs
+   cargo fetch --locked
+   ```
+
+6. Run the full Rust/frontend/Tauri quality suite from a clean checkout.
+7. Run `cargo bench -p sortsmith-core --bench planning` on a consistent machine and record the first real baseline with hardware/toolchain information.
+8. Complete Windows, macOS, and Linux accessibility/integration checks from `docs/testing.md` and `docs/accessibility.md`.
+9. Build candidate installers/packages on every distributed platform.
+10. Fill `docs/release-evidence-0.2.0.md` with actual artifact/check evidence.
+11. Smoke-test install, first launch, disposable-fixture preview/apply/undo, preset migration, native dialogs, keyboard focus behavior, and uninstall/removal on clean target systems.
+12. Configure signing/notarization through protected credentials where required by the intended distribution path.
+13. Capture real screenshots only from the verified artifacts and record their provenance.
+14. Only after all release blockers are cleared, create/publish `v0.2.0` and finalize the dated changelog entry.
+
+## Work intentionally deferred beyond 0.2.0
+
+### Native background scheduling
+
+Watched folders still run only while SortSmith is open. Native operating-system scheduling remains deferred until platform-specific startup, consent, permission, and disable/uninstall behavior can be designed and tested safely.
+
+### Incremental scan cache
+
+The cache is not implemented yet. Criterion targets exist, but a real baseline still needs to be measured. Cache design must define explicit invalidation rules and must be verified against the uncached planner before it can be enabled.
+
+### Performance budgets
+
+The repository has repeatable benchmark targets but no claimed release performance numbers yet. Establish same-machine baselines before setting budgets or claiming cache improvements.
+
+These are the primary 0.3 Scale & Automation tasks after the 0.2 release gate is satisfied.
+
+## Migration notes
+
+- Persisted state schema remains `1`.
+- Existing 0.1 `Everyday tidy` random IDs are migrated at the frontend state-normalization boundary rather than through a schema-version bump.
+- Watched-folder references to the migrated legacy preset are updated in the same normalized state write.
+- User rules and custom presets are preserved.
+- No user preset is deleted to make room for a bundled preset.
+- Undo journal format remains unchanged.
+- Settings backup format remains compatible with schema `1`.
+
+## Commits in this 0.2.0 continuation batch
+
+Starting from previous handoff head `237d84991b41334be10a7f61e46bc134b589988d`, the pre-handoff candidate reached `3b4448d82fa8cf43341fea1838e69a123d4bace1`, **30 commits ahead** with no commits behind.
+
+1. `1ff7b4e37cf839b7628c0ac9355af51178b67897` — `feat(frontend): define stable bundled preset catalog`
+2. `23cd25c3635d6632538aba48a1ad0b10c911dcdf` — `test(frontend): cover bundled preset migration`
+3. `0220dc06fc7709545a816b1d172f0822d0acb3a0` — `fix(frontend): protect all bundled presets by stable id`
+4. `5ca1b5a5b9ca9b4e0e3783cef4ec9eed3e74b226` — `feat(core): expand stable bundled preset library`
+5. `b7991904a58d85160720d35b2f28c5da3cd142b3` — `feat(frontend): migrate bundled presets on startup`
+6. `f24517f1bf40d1d635a3f9d43fe6214bfe3793ad` — `a11y(frontend): restore focus around shortcut dialog`
+7. `fd02142b414c7571e3eb3fdf223abd9b61538947` — `refactor(frontend): source about version from package metadata`
+8. `4269ae046659d8768f43f6c468fc0bd37e0ecd9e` — `release: bump workspace version to 0.2.0`
+9. `4ecbcffff4ecb5566c3a76304559f74aa344e810` — `release(frontend): bump desktop version to 0.2.0`
+10. `cec8d2a12d90fe8d0d324ba4af133f53e445092c` — `release(tauri): bump application version to 0.2.0`
+11. `17ab9e28fa4e79d5cb293335eeb02dbf3f5b79a8` — `release: require dependency lockfiles before tagging`
+12. `0cd6cf3a13a65bace32fc242bc4eeeea773b2f9a` — `ci: allow release metadata sync checks before tagging`
+13. `3578d13a3b9c72f3910b8ea24bda598011094350` — `ci: verify release metadata stays synchronized`
+14. `0c480e1b870d8c378b0c2658cae7be7f740243b3` — `release: enforce lockfiles before packaging`
+15. `b445bebafa5bcf3862f153b938690e196c642a51` — `docs(changelog): prepare 0.2.0 release candidate notes`
+16. `b461ea0d7256ca0112dc3bf2c83943048ef0d132` — `docs(roadmap): align 0.2 candidate and delivered preset packs`
+17. `24662d6e844a73f6ad2d2642b6584809c340f571` — `fix(frontend): normalize bundled presets on every save`
+18. `1391db192859043c9b1cf6f84602456c1d40f1c0` — `docs(presets): document bundled and saved preset behavior`
+19. `8b5b20ef85372663811fee4fe6fbbde492f96359` — `docs(readme): prepare 0.2.0 candidate guidance`
+20. `61e28fb73415f8ab0f4c4493e3f836bbb2f051d5` — `docs(release): enforce 0.2 lockfile and smoke-test gate`
+21. `fd143d64b5fa13699a8b1ddf988d50c095602b70` — `docs(development): align 0.2 preset and release workflow`
+22. `a04dae103ffe5cecfa7f3206b959fb93bc8f817d` — `docs(testing): cover 0.2 preset migration and release guards`
+23. `f42bfc62712d379b382d9f5014fc70056a216d46` — `docs(accessibility): document 0.2 focus restoration behavior`
+24. `b69ea0ccc9067b5c47a6ad4b45da91c13bd78c51` — `docs(shortcuts): document modal focus lifecycle`
+25. `7efae67a4f97e4f15dc565aad462268ab787a1fd` — `docs(github): document 0.2 release safeguards`
+26. `401decfc92cbf1862ab4f85346e5d7317b05cbc6` — `docs(release): add 0.2.0 verification evidence template`
+27. `f66f2e8bcbd2059e10ad0b5336b8e88d7b439ab2` — `docs(screenshots): align capture plan with 0.2.0 evidence`
+28. `6b0f787e19a9acd504c047093a4ba7abb46b777b` — `docs(privacy): align no-telemetry statement with 0.2.0`
+29. `49573ed93c2852f6914bf2165deb0b10035ef70c` — `docs(security): align threat model with 0.2.0`
+30. `3b4448d82fa8cf43341fea1838e69a123d4bace1` — `docs(architecture): align state and automation notes with 0.2`
+
+This handoff update itself is the next commit after that 30-commit range.
 
 ## Continuation rule
 
-Before the next code change, read this file, `ROADMAP.md`, the latest `main` commits, and the latest GitHub Actions results. Prefer fixing demonstrated CI/platform failures before adding another release feature. Keep commits small and reviewable, keep filesystem behavior local-first/reversible, and update this file again after the next meaningful batch.
+Before the next code change:
+
+1. read this file;
+2. read `ROADMAP.md`;
+3. inspect the newest `main` commits;
+4. inspect actual GitHub Actions/CodeQL results if available;
+5. prioritize demonstrated CI/build failures and release lockfiles before adding another release feature.
+
+Do not mark `v0.2.0` ready based only on source review. Keep filesystem changes local-first, previewed, reversible, and root-contained. Keep commits small and reviewable. Update this file again after the next meaningful batch.
