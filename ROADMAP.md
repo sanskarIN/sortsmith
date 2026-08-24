@@ -15,13 +15,14 @@
 - [x] Native folder picker and richer all-criteria rule builder.
 - [x] Journal history UI with selective operation undo.
 - [x] Native import/export controls in Settings.
+- [x] Keyboard-first quick actions for high-frequency organizer workflows, with an in-app shortcut reference and editing-safe key handling.
 - [ ] Signed/notarized installers and real release screenshots.
 - [ ] Expanded integration and accessibility tests on all supported operating systems.
-- [ ] Add keyboard-first quick actions for high-frequency organizer workflows after usability validation.
 
 ## 0.3 — Scale and automation
 - [ ] Native background scheduling where each platform can provide safe, explicit user consent.
 - [ ] Incremental scan cache for very large folders, backed by benchmarks and explicit invalidation rules.
-- [ ] More preset packs and saved user-defined preset management.
-- [ ] Additional fuzz/property coverage for rule serialization, templates, and path edge cases.
-- [ ] Benchmark duplicate hashing and organization planning on representative large directory trees.
+- [x] Saved user-defined preset management with load, metadata editing, guarded deletion, and watched-folder reference protection.
+- [ ] Additional curated built-in preset packs after rule behavior is validated against representative user workflows.
+- [x] Property coverage for rule serialization, rename templates, portable filenames, and path traversal edge cases.
+- [x] Repeatable Criterion benchmarks for organization planning and duplicate hashing on representative synthetic directory trees.
