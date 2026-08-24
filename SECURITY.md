@@ -27,12 +27,16 @@ Current controls include:
 - imported settings and saved local state reject symlink-backed files at the trust boundary;
 - structured operation logs exclude file paths/content, rotate at 5 MiB, and refuse symlink/non-file targets;
 - duplicate detection hashes locally and never deletes duplicate candidates automatically;
+- bundled preset migration preserves user rule snapshots and remaps watched-folder references instead of deleting user configuration;
 - Tauri's Content Security Policy restricts application content to local sources and the IPC endpoint required by the desktop runtime;
-- CI includes format/lint/tests/build checks and CodeQL analysis for TypeScript and Rust.
+- CI includes format/lint/tests/build checks, release-version synchronization, and CodeQL analysis for TypeScript and Rust;
+- release packaging is fail-closed until package-manager-generated npm/Cargo lockfiles are present and aligned with release metadata.
 
 ## Threat-model limitations
 
-SortSmith cannot protect files from an already-compromised operating-system account, malicious kernel/administrator software, or external programs racing to replace files after validation. Users remain responsible for operating-system permissions and independent backups of irreplaceable data. Native background execution is not enabled in version 0.1, reducing unattended permission/startup risk.
+SortSmith cannot protect files from an already-compromised operating-system account, malicious kernel/administrator software, or external programs racing to replace files after validation. Users remain responsible for operating-system permissions and independent backups of irreplaceable data. Native background execution is not enabled in version 0.2, reducing unattended permission/startup risk.
+
+Version `0.2.0` source metadata is prepared as a release candidate, not a security attestation. Public distribution still requires real CI/security results, clean installer verification, and platform signing/notarization decisions.
 
 ## Secrets
 
