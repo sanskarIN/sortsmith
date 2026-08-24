@@ -20,6 +20,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 
 - Rules by extension, MIME prefix, modified age, size range, and filename regex.
 - Multi-criterion rule builder with match-all/match-any behavior and reusable presets.
+- Saved user presets: snapshot active rules, load them later, edit custom preset metadata, and safely delete presets that are not used by watched folders.
 - Native folder picker plus typed-path fallback.
 - Dry-run previews with source/destination visibility before any change.
 - Collision-safe moving and renaming with cross-platform filename validation.
@@ -27,6 +28,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 - BLAKE3 duplicate-candidate detection with size pre-filtering, parallel hashing, hidden-folder controls, and no auto-delete.
 - Watched folders with user-controlled presets and intervals while SortSmith is running.
 - Native JSON settings backup/restore with schema validation and local undo-history preservation.
+- Keyboard-first quick actions for navigation, folder selection, preview, apply, and undo; press `Shift+?` in the app for the reference.
 - Bounded, durable local settings persistence and rotating privacy-safe operation logs.
 - Light, dark, and system themes; keyboard focus states; reduced-motion preference.
 - Permission failures are isolated as recoverable errors where possible.
@@ -46,6 +48,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 - Tauri 2 desktop host.
 - React 19 + TypeScript + Vite frontend.
 - BLAKE3, WalkDir, Rayon, Regex, Serde, Chrono.
+- Proptest property coverage and Criterion performance benchmarks for core filesystem behavior.
 - GitHub Actions CI and CodeQL scanning for TypeScript and Rust.
 
 ## Quick start
@@ -67,6 +70,7 @@ See [`docs/setup.md`](docs/setup.md) for platform prerequisites and [`docs/devel
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
+cargo bench -p sortsmith-core --bench planning
 cd apps/desktop
 npm install --no-audit --no-fund
 npm run typecheck
@@ -74,7 +78,7 @@ npm test
 npm run build
 ```
 
-CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose.
+CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose. Timing-sensitive Criterion measurements should be compared on the same local machine/toolchain rather than treated as stable shared-runner numbers.
 
 ## Build and release
 
