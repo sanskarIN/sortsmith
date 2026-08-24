@@ -4,6 +4,7 @@ import { AutomationPage } from "./AutomationPage";
 import { chooseFolder } from "./dialogs";
 import { HistoryPage } from "./HistoryPage";
 import { strings } from "./i18n";
+import { KeyboardController } from "./KeyboardController";
 import { RulesPage } from "./RulesPage";
 import { SettingsDataTools } from "./SettingsDataTools";
 import type { AppStateData, DuplicateGroup, PreviewResult } from "./types";
@@ -108,10 +109,20 @@ function App() {
   }
 
   return <div className="app-shell">
+    <KeyboardController
+      busy={busy}
+      canApply={Boolean(preview?.operations.length)}
+      canUndo={state.recentJournalIds.length > 0}
+      onNavigate={nextPage => setPage(nextPage)}
+      onChooseFolder={() => void pickRootFolder()}
+      onPreview={() => void runPreview()}
+      onApply={() => void applyPreview()}
+      onUndo={() => void undoLatest()}
+    />
     <aside className="sidebar" aria-label="Main navigation">
       <div className="brand"><div className="brand-mark" aria-hidden="true">S</div><div><strong>SortSmith</strong><span>File Organizer</span></div></div>
       <nav>{(["organize","rules","duplicates","automation","history","settings","about"] as Page[]).map(item => <button key={item} className={page===item?"active":""} aria-current={page===item?"page":undefined} onClick={()=>setPage(item)}>{item[0].toUpperCase()+item.slice(1)}</button>)}</nav>
-      <div className="sidebar-footer"><span className="privacy-dot"/>Offline-first & private</div>
+      <div className="sidebar-footer"><span className="privacy-dot"/>Offline-first & private · Shift+? shortcuts</div>
     </aside>
 
     <main className="content">
