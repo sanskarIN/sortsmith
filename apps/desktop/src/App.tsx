@@ -11,6 +11,7 @@ import { RulesPage } from "./RulesPage";
 import { SettingsDataTools } from "./SettingsDataTools";
 import type { AppStateData, DuplicateGroup, PreviewResult } from "./types";
 import { formatBytes, shortPath } from "./utils";
+import { mergeWatchedRunState, summarizeWatchedRunMessages } from "./watchSync";
 
 type Page = "organize" | "rules" | "duplicates" | "automation" | "history" | "settings" | "about";
 
@@ -66,8 +67,29 @@ function App() {
   }, [state.settings]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => { backend.runDueWatches().catch(() => undefined); }, 60_000);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let running = false;
+
+    async function runWatchTick() {
+      if (running) return;
+      running = true;
+      try {
+        const messages = await backend.runDueWatches();
+        if (cancelled || messages.length === 0) return;
+        const persisted = await backend.loadState();
+        if (cancelled) return;
+        setState(current => mergeWatchedRunState(current, persisted));
+        const summary = summarizeWatchedRunMessages(messages);
+        if (summary) setMessage(summary);
+      } catch {
+        if (!cancelled) setMessage("Watched-folder check could not complete. No automatic retry changes were applied by the interface.");
+      } finally {
+        running = false;
+      }
+    }
+
+    const timer = window.setInterval(() => { void runWatchTick(); }, 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   async function persist(next: AppStateData) {
