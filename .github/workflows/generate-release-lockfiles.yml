@@ -1,0 +1,69 @@
+name: Generate 0.2 release lockfiles
+
+on:
+  push:
+    branches: [release/0.2-lockfiles]
+    paths:
+      - Cargo.toml
+      - crates/**/Cargo.toml
+      - apps/desktop/package.json
+      - .github/workflows/generate-release-lockfiles.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-0.2-release-lockfiles
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Use repository-pinned npm
+        run: npm install --global npm@10.9.2
+
+      - name: Generate Cargo lockfile
+        run: cargo generate-lockfile
+
+      - name: Generate npm lockfile
+        working-directory: apps/desktop
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Verify 0.2 release metadata
+        run: node scripts/verify-release-version.mjs v0.2.0
+
+      - name: Verify generated lockfiles
+        run: node scripts/verify-release-lockfiles.mjs
+
+      - name: Verify locked Cargo resolution
+        run: cargo fetch --locked
+
+      - name: Verify locked npm installation
+        working-directory: apps/desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Check generated diff
+        run: git diff --check
+
+      - name: Commit generated lockfiles
+        shell: bash
+        run: |
+          git config user.name "sanskarIN"
+          git config user.email "sanskarin@outlook.in"
+          git add Cargo.lock apps/desktop/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles are already current."
+            exit 0
+          fi
+          git commit -m "build(lockfiles): generate 0.2 release dependency locks"
+          git push origin HEAD:release/0.2-lockfiles
