@@ -8,20 +8,30 @@ on:
       - crates/**/Cargo.toml
       - apps/desktop/package.json
       - .github/workflows/generate-release-lockfiles.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - crates/**/Cargo.toml
+      - apps/desktop/package.json
+      - .github/workflows/generate-release-lockfiles.yml
 
 permissions:
   contents: write
 
 concurrency:
-  group: generate-0.2-release-lockfiles
+  group: generate-0.2-release-lockfiles-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   generate:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: release/0.2-lockfiles
 
       - uses: dtolnay/rust-toolchain@stable
 
