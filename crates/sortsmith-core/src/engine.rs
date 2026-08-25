@@ -120,10 +120,14 @@ fn validate_preview_paths(root: &Path, preview: &PreviewResult) -> Result<()> {
 
 fn describe_file(root: &Path, path: &Path) -> Result<FileEntry> {
     let metadata = fs::metadata(path).map_err(|e| io(path, e))?;
+    Ok(describe_file_from_metadata(root, path, &metadata))
+}
+
+pub(crate) fn describe_file_from_metadata(root: &Path, path: &Path, metadata: &fs::Metadata) -> FileEntry {
     let modified_at = metadata.modified().ok().map(DateTime::<Utc>::from);
     let extension = path.extension().and_then(|v| v.to_str()).map(|v| v.to_ascii_lowercase());
     let mime = mime_guess::from_path(path).first().map(|v| v.essence_str().to_string());
-    Ok(FileEntry { path: path.to_path_buf(), relative_path: path.strip_prefix(root).unwrap_or(path).to_path_buf(), size: metadata.len(), modified_at, mime, extension })
+    FileEntry { path: path.to_path_buf(), relative_path: path.strip_prefix(root).unwrap_or(path).to_path_buf(), size: metadata.len(), modified_at, mime, extension }
 }
 
 fn is_hidden(entry: &DirEntry, root: &Path) -> bool {
