@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use sortsmith_core::{Rule, RuleAction, RuleCriterion, ScanOptions, find_duplicates, preview_organization};
+use sortsmith_core::{Rule, RuleAction, RuleCriterion, ScanCache, ScanOptions, find_duplicates, preview_organization, preview_organization_cached};
 use std::fs;
 use std::hint::black_box;
 use tempfile::TempDir;
@@ -56,6 +56,33 @@ fn benchmark_planning(c: &mut Criterion) {
     group.finish();
 }
 
+fn benchmark_warm_cached_planning(c: &mut Criterion) {
+    let options = ScanOptions { recursive: false, include_hidden: false, follow_links: false, max_depth: Some(32) };
+    let rules = vec![organization_rule()];
+    let mut group = c.benchmark_group("organization_planning_warm_cache");
+
+    for count in [100usize, 1_000, 5_000] {
+        let dir = seed_planning_tree(count);
+        let mut cache = ScanCache::default();
+        preview_organization_cached(dir.path(), &rules, &options, &mut cache)
+            .expect("cache warm-up should succeed");
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(count), &count, |bencher, _| {
+            bencher.iter(|| {
+                let preview = preview_organization_cached(
+                    black_box(dir.path()),
+                    black_box(&rules),
+                    black_box(&options),
+                    black_box(&mut cache),
+                )
+                .expect("cached planning benchmark should succeed");
+                black_box(preview);
+            });
+        });
+    }
+    group.finish();
+}
+
 fn benchmark_duplicate_hashing(c: &mut Criterion) {
     let options = ScanOptions { recursive: false, include_hidden: false, follow_links: false, max_depth: Some(32) };
     let mut group = c.benchmark_group("duplicate_hashing");
@@ -74,5 +101,5 @@ fn benchmark_duplicate_hashing(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_planning, benchmark_duplicate_hashing);
+criterion_group!(benches, benchmark_planning, benchmark_warm_cached_planning, benchmark_duplicate_hashing);
 criterion_main!(benches);
