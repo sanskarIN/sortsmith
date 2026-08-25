@@ -150,6 +150,7 @@ fn import_state(path: String) -> Result<AppStateData, String> {
 fn run_due_watches(app: AppHandle, cache: State<'_, Mutex<ScanCache>>) -> Result<Vec<String>, String> {
     let mut state = load_state(app.clone())?;
     let mut messages = Vec::new();
+    let mut state_changed = false;
     let preset_map = state.presets.iter().map(|p| (p.id, p.rules.clone())).collect::<std::collections::HashMap<_,_>>();
     let journals = journals_dir(&app)?;
     for watch in &mut state.watched_folders {
@@ -161,13 +162,38 @@ fn run_due_watches(app: AppHandle, cache: State<'_, Mutex<ScanCache>>) -> Result
         if rules.is_empty() { messages.push("A watched folder has no usable preset.".into()); continue; }
         let options = ScanOptions { recursive: state.settings.recursive_scan, include_hidden: state.settings.include_hidden, follow_links: false, max_depth: Some(32) };
         clear_preview_cache(&cache);
-        match preview_organization(&root, &rules, &options).and_then(|p| execute_preview(&root, &p, &journals)) {
-            Ok(report) => { watch.last_run_at = Some(Utc::now()); state.recent_journal_ids.insert(0, report.journal.id); append_operation_log(&app, "watch", report.journal.id, report.completed, report.errors.len()); messages.push(format!("A watched folder completed {} change(s).", report.completed)); }
-            Err(_) => messages.push("A watched folder run could not complete safely.".into()),
+        match preview_organization(&root, &rules, &options) {
+            Ok(preview) if preview.operations.is_empty() => {
+                watch.last_run_at = Some(Utc::now());
+                state_changed = true;
+                if preview.recoverable_errors.is_empty() {
+                    messages.push("A watched folder was already organized; no changes were needed.".into());
+                } else {
+                    messages.push(format!("A watched folder needed no changes, but {} item(s) could not be inspected.", preview.recoverable_errors.len()));
+                }
+            }
+            Ok(preview) => match execute_preview(&root, &preview, &journals) {
+                Ok(report) => {
+                    watch.last_run_at = Some(Utc::now());
+                    state.recent_journal_ids.insert(0, report.journal.id);
+                    state_changed = true;
+                    append_operation_log(&app, "watch", report.journal.id, report.completed, report.errors.len());
+                    let issue_count = preview.recoverable_errors.len() + report.errors.len();
+                    if issue_count == 0 {
+                        messages.push(format!("A watched folder completed {} change(s).", report.completed));
+                    } else {
+                        messages.push(format!("A watched folder completed {} change(s) with {} item(s) needing attention.", report.completed, issue_count));
+                    }
+                }
+                Err(_) => messages.push("A watched folder run could not complete safely.".into()),
+            },
+            Err(_) => messages.push("A watched folder scan could not complete safely.".into()),
         }
     }
-    state.recent_journal_ids.truncate(20);
-    save_state(app, state)?;
+    if state_changed {
+        state.recent_journal_ids.truncate(20);
+        save_state(app, state)?;
+    }
     Ok(messages)
 }
 
