@@ -165,6 +165,7 @@ fn redact_walk_error(error: &walkdir::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::preview_organization;
     use crate::models::RuleAction;
     use tempfile::tempdir;
 
@@ -176,6 +177,30 @@ mod tests {
             match_all: true,
             criteria: vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
             action: RuleAction::MoveTo { subdirectory: destination.into() },
+        }
+    }
+
+    #[test]
+    fn cached_and_uncached_plans_make_the_same_decisions() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        std::fs::write(root.path().join("ignored.bin"), b"binary").unwrap();
+        let rules = vec![extension_rule("Text", "Text")];
+        let options = ScanOptions::default();
+        let uncached = preview_organization(root.path(), &rules, &options).unwrap();
+        let mut cache = ScanCache::default();
+        let cached = preview_organization_cached(root.path(), &rules, &options, &mut cache).unwrap();
+
+        assert_eq!(uncached.scanned_files, cached.scanned_files);
+        assert_eq!(uncached.ignored_files, cached.ignored_files);
+        assert_eq!(uncached.recoverable_errors, cached.recoverable_errors);
+        assert_eq!(uncached.operations.len(), cached.operations.len());
+        for (left, right) in uncached.operations.iter().zip(&cached.operations) {
+            assert_eq!(left.source, right.source);
+            assert_eq!(left.destination, right.destination);
+            assert_eq!(left.rule_id, right.rule_id);
+            assert_eq!(left.rule_name, right.rule_name);
+            assert_eq!(left.size, right.size);
         }
     }
 
@@ -195,6 +220,24 @@ mod tests {
         assert_eq!(first.operations[0].source, second.operations[0].source);
         assert_eq!(first.operations[0].destination, second.operations[0].destination);
         assert_eq!(cache.stats(), ScanCacheStats { reused_files: 1, rescanned_files: 0, revalidated_time_sensitive_files: 0, cached_entries: 1 });
+    }
+
+    #[test]
+    fn collision_resolution_is_recomputed_on_cache_hit() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let rule = extension_rule("Text", "Text");
+        let mut cache = ScanCache::default();
+
+        let first = preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        let occupied = first.operations[0].destination.clone();
+        std::fs::create_dir_all(occupied.parent().unwrap()).unwrap();
+        std::fs::write(&occupied, b"existing destination").unwrap();
+
+        let second = preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        assert_eq!(cache.stats().reused_files, 1);
+        assert_ne!(second.operations[0].destination, occupied);
+        assert!(!second.operations[0].destination.exists());
     }
 
     #[test]
