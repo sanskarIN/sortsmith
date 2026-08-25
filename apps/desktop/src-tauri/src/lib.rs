@@ -1,12 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use chrono::{DateTime, Duration, Utc};
-use sortsmith_core::{find_duplicates, execute_preview, preview_organization, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanOptions};
+use sortsmith_core::{find_duplicates, execute_preview, preview_organization, preview_organization_cached, undo_journal, AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule, ScanCache, ScanOptions};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
 
 const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_OPERATION_LOG_BYTES: u64 = 5 * 1024 * 1024;
@@ -62,31 +63,36 @@ fn save_state(app: AppHandle, state: AppStateData) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn preview(root: String, rules: Vec<Rule>, recursive: bool, include_hidden: bool) -> Result<PreviewResult, String> {
+fn preview(cache: State<'_, Mutex<ScanCache>>, root: String, rules: Vec<Rule>, recursive: bool, include_hidden: bool) -> Result<PreviewResult, String> {
     let root = validated_root(&root)?;
     let options = ScanOptions { recursive, include_hidden, follow_links: false, max_depth: Some(32) };
-    preview_organization(&root, &rules, &options).map_err(|e| e.to_string())
+    match cache.lock() {
+        Ok(mut cache) => preview_organization_cached(&root, &rules, &options, &mut cache).map_err(|e| e.to_string()),
+        Err(_) => preview_organization(&root, &rules, &options).map_err(|e| e.to_string()),
+    }
 }
 
 #[tauri::command]
-fn execute(app: AppHandle, root: String, preview: PreviewResult) -> Result<ExecutionReport, String> {
+fn execute(app: AppHandle, cache: State<'_, Mutex<ScanCache>>, root: String, preview: PreviewResult) -> Result<ExecutionReport, String> {
     let root = validated_root(&root)?;
     for op in &preview.operations {
         if !safe_operation_path(&root, &op.source, true) || !safe_operation_path(&root, &op.destination, false) {
             return Err("A planned operation escaped the selected root and was blocked.".into());
         }
     }
+    clear_preview_cache(&cache);
     let report = execute_preview(&root, &preview, &journals_dir(&app)?).map_err(|e| e.to_string())?;
     append_operation_log(&app, "execute", report.journal.id, report.completed, report.errors.len());
     Ok(report)
 }
 
 #[tauri::command]
-fn undo(app: AppHandle, journal_id: String) -> Result<ExecutionReport, String> {
+fn undo(app: AppHandle, cache: State<'_, Mutex<ScanCache>>, journal_id: String) -> Result<ExecutionReport, String> {
     let id = uuid::Uuid::parse_str(&journal_id).map_err(|_| "Invalid journal identifier.".to_string())?;
     let path = journals_dir(&app)?.join(format!("{id}.journal.json"));
     let journal = sortsmith_core::journal::load_journal(&path).map_err(|e| e.to_string())?;
     validate_journal_paths(&journal)?;
+    clear_preview_cache(&cache);
     let report = undo_journal(&path).map_err(|e| e.to_string())?;
     append_operation_log(&app, "undo", report.journal.id, report.completed, report.errors.len());
     Ok(report)
@@ -141,7 +147,7 @@ fn import_state(path: String) -> Result<AppStateData, String> {
 }
 
 #[tauri::command]
-fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
+fn run_due_watches(app: AppHandle, cache: State<'_, Mutex<ScanCache>>) -> Result<Vec<String>, String> {
     let mut state = load_state(app.clone())?;
     let mut messages = Vec::new();
     let preset_map = state.presets.iter().map(|p| (p.id, p.rules.clone())).collect::<std::collections::HashMap<_,_>>();
@@ -154,6 +160,7 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
         let rules = watch.preset_id.and_then(|id| preset_map.get(&id).cloned()).unwrap_or_default();
         if rules.is_empty() { messages.push("A watched folder has no usable preset.".into()); continue; }
         let options = ScanOptions { recursive: state.settings.recursive_scan, include_hidden: state.settings.include_hidden, follow_links: false, max_depth: Some(32) };
+        clear_preview_cache(&cache);
         match preview_organization(&root, &rules, &options).and_then(|p| execute_preview(&root, &p, &journals)) {
             Ok(report) => { watch.last_run_at = Some(Utc::now()); state.recent_journal_ids.insert(0, report.journal.id); append_operation_log(&app, "watch", report.journal.id, report.completed, report.errors.len()); messages.push(format!("A watched folder completed {} change(s).", report.completed)); }
             Err(_) => messages.push("A watched folder run could not complete safely.".into()),
@@ -162,6 +169,10 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
     state.recent_journal_ids.truncate(20);
     save_state(app, state)?;
     Ok(messages)
+}
+
+fn clear_preview_cache(cache: &State<'_, Mutex<ScanCache>>) {
+    if let Ok(mut cache) = cache.lock() { cache.clear(); }
 }
 
 fn validate_state_data(state: &AppStateData) -> Result<(), String> {
@@ -366,6 +377,7 @@ mod tests {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Mutex::new(ScanCache::default()))
         .invoke_handler(tauri::generate_handler![load_state, save_state, preview, execute, undo, list_journals, find_duplicate_candidates, export_state, import_state, run_due_watches])
         .run(tauri::generate_context!())
         .expect("error while running SortSmith");
