@@ -10,7 +10,7 @@
 
 SortSmith is an offline-first desktop file organizer built with **Rust + Tauri + React**. It previews changes before touching the filesystem, records reversible operation journals, detects duplicate candidates by content hash without deleting them, and can run user-controlled watched-folder rules while the app is open.
 
-> **Development status:** source metadata is prepared for the `0.2.0` release candidate. Do not treat `v0.2.0` as publishable until required CI is green, both dependency lockfiles are committed and verified, cross-platform installer smoke tests pass, verified screenshots are captured, and required signing/notarization is complete.
+> **Development status:** `main` remains the prepared `0.2.0` release candidate. The `develop/0.3.0` branch is the next-version line and currently adds incremental in-memory preview caching. Do not treat either version as publishable until its required CI/release gates are complete; `v0.2.0` still requires committed lockfiles, clean cross-platform installer smoke tests, verified screenshots, and required signing/notarization.
 
 ## Screenshots
 
@@ -25,6 +25,7 @@ Real release screenshots will be captured from verified release builds. Capture 
 - Saved user presets: snapshot active rules, load them later, edit custom preset metadata, and safely delete presets that are not used by watched folders. See [`docs/presets.md`](docs/presets.md).
 - Native folder picker plus typed-path fallback.
 - Dry-run previews with source/destination visibility before any change.
+- Incremental process-local caching for repeated interactive previews on the 0.3 development line, with exact scope invalidation and time-sensitive rule revalidation.
 - Collision-safe moving and renaming with cross-platform filename validation.
 - Reversible JSON journals, latest undo, and selectable operation-history undo.
 - BLAKE3 duplicate-candidate detection with size pre-filtering, parallel hashing, hidden-folder controls, and no auto-delete.
@@ -65,7 +66,7 @@ npm install
 npm run tauri dev
 ```
 
-See [`docs/setup.md`](docs/setup.md) for platform prerequisites and [`docs/development.md`](docs/development.md) for the complete workflow.
+For 0.3 development, check out `develop/0.3.0` before installing dependencies. See [`docs/setup.md`](docs/setup.md) for platform prerequisites and [`docs/development.md`](docs/development.md) for the complete workflow.
 
 ## Testing
 
@@ -81,13 +82,13 @@ npm test
 npm run build
 ```
 
-CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose. Timing-sensitive Criterion measurements should be compared on the same local machine/toolchain rather than treated as stable shared-runner numbers.
+CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose. Timing-sensitive Criterion measurements should be compared on the same local machine/toolchain rather than treated as stable shared-runner numbers. On the 0.3 branch, compare the `organization_planning` and `organization_planning_warm_cache` benchmark groups before making any cache-performance claim.
 
 ## Build and release
 
 Development builds may continue using normal package-manager resolution until the lockfiles are generated. A release tag is fail-closed and requires committed lockfiles.
 
-Before creating the `v0.2.0` tag from the repository root:
+The `v0.2.0` release must be created only from the validated `main` candidate. Before tagging from the repository root:
 
 ```bash
 node scripts/verify-release-version.mjs v0.2.0
@@ -103,11 +104,17 @@ npm ci --no-audit --no-fund
 npm run tauri build
 ```
 
+The 0.3 development branch uses synchronized `0.3.0` source metadata but is not a release candidate. Its ordinary consistency check is:
+
+```bash
+node scripts/verify-release-version.mjs
+```
+
 Packaging is automated by `.github/workflows/release.yml` for `v*` tags. The workflow rechecks release metadata and lockfiles before building on Windows, macOS, and Linux, and creates a draft GitHub Release rather than publishing unverified artifacts automatically. Release guidance is in [`docs/release.md`](docs/release.md).
 
 ## Architecture
 
-The repository is a modular monolith: deterministic filesystem domain logic lives in `crates/sortsmith-core`; Tauri commands adapt that logic to the desktop runtime; the React frontend owns presentation and interaction. See [`docs/architecture.md`](docs/architecture.md) and [`docs/adr/`](docs/adr/).
+The repository is a modular monolith: deterministic filesystem domain logic lives in `crates/sortsmith-core`; Tauri commands adapt that logic to the desktop runtime; the React frontend owns presentation and interaction. The 0.3 cache remains a disposable optimization inside the core/desktop boundary and does not change persisted settings. See [`docs/architecture.md`](docs/architecture.md) and [`docs/adr/`](docs/adr/).
 
 ## Security and privacy
 
