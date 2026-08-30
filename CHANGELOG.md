@@ -4,7 +4,32 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 ## [Unreleased]
 
-Target release candidate: `0.2.0`. This section is intentionally undated until the release gate is complete and the tag is actually published.
+Development line: `0.3.0` on `develop/0.3.0`. This work is intentionally isolated from the `0.2.0` release candidate on `main` until the 0.2 release gate is resolved.
+
+### Added
+- Incremental in-memory preview scan cache for repeated interactive organization previews.
+- Exact cache scoping across selected root, ordered rules, and scan options.
+- File-level cache invalidation using path, file size, and modification timestamp.
+- Cache pruning for deleted/moved files and explicit clearing before filesystem mutations.
+- Mandatory re-evaluation of time-sensitive `ModifiedOlderThanDays` rules on reused file descriptions.
+- Fail-safe desktop fallback to the uncached planner if the process-local cache mutex is unavailable.
+- Warm-cache Criterion benchmark group paired with the existing uncached organization-planning benchmark.
+- Core regression tests for unchanged-file reuse, rule-scope invalidation, changed-file rescanning, deletion pruning, explicit clearing, and time-sensitive revalidation.
+
+### Changed
+- Interactive desktop previews now use the incremental cache while preserving the existing `PreviewResult` contract.
+- Destination construction and collision-safe destination resolution still run on every preview, including cache hits.
+- Apply, undo, and in-app watched-folder execution clear the interactive preview cache before filesystem mutation.
+- Workspace, frontend package, and Tauri application development versions are aligned at `0.3.0` on the development branch.
+
+### Verification pending
+- Rust formatting, Clippy, unit tests, desktop-host checks, and CodeQL must be green for the 0.3 branch.
+- Same-machine uncached versus warm-cache Criterion measurements must be recorded before claiming a performance improvement or setting a performance budget.
+- The cache remains in-memory only; persistent cache format/invalidation is intentionally not introduced in this phase.
+
+## [0.2.0] - Unreleased release candidate
+
+The source candidate remains on `main`. This section is intentionally undated until the release gate is complete and the tag is actually published.
 
 ### Added
 - Production-oriented Rust/Tauri/React SortSmith baseline.

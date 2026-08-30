@@ -59,6 +59,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - name: Use repository-pinned npm
+        run: npm install --global npm@10.9.2
       - name: Verify release metadata sync
         run: node ../../scripts/verify-release-version.mjs
       - name: Install frontend dependencies

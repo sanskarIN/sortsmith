@@ -1,6 +1,8 @@
 # Testing
 
-The core crate carries unit/integration-style coverage for rule validation, path safety, collision handling, portable rename output, dry-run/apply/undo, journal persistence, hidden-folder behavior, duplicate detection, and bundled-preset validity/stable identifiers. Property tests additionally exercise rule serialization round-trips, traversal rejection, generated portable filenames, and rename-template extension preservation across many generated inputs.
+The core crate carries unit/integration-style coverage for rule validation, path safety, collision handling, portable rename output, dry-run/apply/undo, journal persistence, hidden-folder behavior, duplicate detection, bundled-preset validity/stable identifiers, and incremental preview-cache invalidation. Property tests additionally exercise rule serialization round-trips, traversal rejection, generated portable filenames, and rename-template extension preservation across many generated inputs.
+
+The incremental preview-cache tests specifically cover unchanged-file reuse, rule-scope invalidation, changed-file rescanning, deleted-entry pruning, explicit cache clearing, and mandatory revalidation for time-sensitive `ModifiedOlderThanDays` criteria. Cache hits never bypass destination collision resolution.
 
 The Tauri desktop host has focused tests for bounded operation-log rotation. The frontend tests deterministic formatting/timing utilities, saved-preset helpers, bundled-preset compatibility migration, watched-folder reference remapping, preset-capacity behavior, and keyboard shortcut resolution with Vitest.
 
@@ -26,6 +28,31 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## 0.3 incremental-cache validation
+
+The `planning` Criterion target now contains both the existing uncached `organization_planning` group and a warmed `organization_planning_warm_cache` group. Run both on the same machine and toolchain before claiming a cache speedup:
+
+```bash
+cargo test -p sortsmith-core scan_cache
+cargo bench -p sortsmith-core --bench planning -- organization_planning
+```
+
+Record the CPU, storage type, operating system, Rust version, build profile, file-count fixture, uncached median, warm-cache median, and variance. Do not establish a performance budget from shared CI timings.
+
+Correctness verification must confirm all of the following on disposable folders:
+
+- the first cached preview produces the same source/destination/rule decisions as the uncached planner;
+- a second unchanged preview can reuse cached file descriptions and rule decisions;
+- changing any rule, selected root, recursive/hidden option, file size, file modified time, or file path invalidates the relevant cached decision;
+- deleting files removes their entries from the cache;
+- time-sensitive modified-age rules are re-evaluated even when file metadata is otherwise reusable;
+- collision-safe destination selection is recalculated on every preview rather than cached;
+- apply and undo clear the interactive preview cache before filesystem mutation;
+- watched-folder execution clears the interactive cache before applying background-in-app changes;
+- a poisoned/unavailable cache falls back to the existing uncached planner instead of blocking organization.
+
+The cache is currently in-memory only. Restarting SortSmith starts with an empty cache, so no cache migration or persistent-cache corruption scenario exists in this phase.
 
 ## Required 0.2.0 release checks
 

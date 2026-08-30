@@ -28,9 +28,18 @@
 
 ## 0.3 — Scale and automation
 - [ ] Native background scheduling where each platform can provide safe, explicit user consent.
-- [ ] Incremental scan cache for very large folders, backed by benchmarks and explicit invalidation rules.
+- [x] Implement process-local incremental preview caching with exact root/rule/options scoping, file metadata invalidation, deletion pruning, and time-sensitive rule revalidation.
+- [x] Integrate cached interactive previews into the Tauri desktop host with uncached fallback and mutation-time invalidation.
+- [x] Add repeatable warm-cache Criterion coverage alongside the existing uncached planning benchmark.
+- [ ] Establish same-machine uncached versus warm-cache measurements and define a performance budget before expanding cache behavior.
+- [ ] Decide whether a persistent cache is justified; if so, design explicit versioning, bounded storage, corruption recovery, and invalidation rules before implementation.
 - [x] Saved user-defined preset management with load, metadata editing, guarded deletion, and watched-folder reference protection.
 - [x] Additional curated built-in preset packs with stable identifiers and compatibility migration.
 - [x] Property coverage for rule serialization, rename templates, portable filenames, and path traversal edge cases.
 - [x] Repeatable Criterion benchmarks for organization planning and duplicate hashing on representative synthetic directory trees.
-- [ ] Establish measured performance budgets from repeatable benchmark runs before enabling an incremental scan cache.
+- [ ] Complete 0.3 branch CI/CodeQL validation and add platform integration coverage for repeated preview/apply/undo cycles.
+
+## 0.4 — Candidate follow-on work
+- [ ] Evaluate per-root cache partitioning if multiple watched folders need independent warm caches.
+- [ ] Evaluate native filesystem-change notifications only after cross-platform correctness and permission behavior are documented.
+- [ ] Revisit persistent indexing only if measured 0.3 performance shows the in-memory cache is insufficient for target folder sizes.
