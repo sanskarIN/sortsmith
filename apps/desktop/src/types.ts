@@ -19,3 +19,4 @@ export interface PlannedOperation { id: string; source: string; destination: str
 export interface PreviewResult { operations: PlannedOperation[]; scannedFiles: number; ignoredFiles: number; recoverableErrors: string[] }
 export interface ExecutionReport { journal: { id: string; createdAt: string; root: string; entries: unknown[] }; completed: number; errors: string[] }
 export interface DuplicateGroup { hash: string; size: number; files: { path: string; size: number }[] }
+export interface JournalSummary { id: string; createdAt: string; root: string; entryCount: number; availableToUndo: number }

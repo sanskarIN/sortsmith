@@ -18,4 +18,5 @@ serde.workspace = true
 serde_json.workspace = true
 sortsmith-core = { path = "../../../crates/sortsmith-core" }
 tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.2"
 uuid.workspace = true

@@ -1,16 +1,17 @@
 use crate::error::io;
 use crate::journal::{load_journal, save_journal};
 use crate::models::*;
-use crate::rules::{destination_for, rule_matches};
+use crate::rules::{destination_for, PreparedRule};
 use crate::safety::collision_safe_path;
-use crate::Result;
+use crate::{Result, SortSmithError};
 use chrono::{DateTime, Utc};
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path};
 use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
 pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) -> Result<PreviewResult> {
+    let prepared_rules = rules.iter().filter(|rule| rule.enabled).map(PreparedRule::new).collect::<Result<Vec<_>>>()?;
     let mut result = PreviewResult::default();
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
@@ -26,8 +27,9 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
             Err(err) => { result.recoverable_errors.push(err.to_string()); continue; }
         };
         let mut planned = false;
-        for rule in rules.iter().filter(|r| r.enabled) {
-            if rule_matches(rule, &file)? {
+        for prepared in &prepared_rules {
+            if prepared.matches(&file) {
+                let rule = prepared.rule();
                 let destination = collision_safe_path(&destination_for(root, &file, rule)?);
                 if destination != file.path {
                     result.operations.push(PlannedOperation { id: Uuid::new_v4(), source: file.path.clone(), destination, rule_id: rule.id, rule_name: rule.name.clone(), size: file.size });
@@ -42,8 +44,9 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
 }
 
 pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path) -> Result<ExecutionReport> {
-    fs::create_dir_all(journal_dir).map_err(|e| io(journal_dir, e))?;
+    validate_preview_paths(root, preview)?;
     let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: root.to_path_buf(), entries: Vec::new() };
+    save_journal(journal_dir, &journal)?;
     let mut errors = Vec::new();
     for op in &preview.operations {
         let destination = collision_safe_path(&op.destination);
@@ -83,6 +86,36 @@ pub fn undo_journal(journal_path: &Path) -> Result<ExecutionReport> {
         }
     }
     Ok(ExecutionReport { journal, completed, errors })
+}
+
+fn validate_preview_paths(root: &Path, preview: &PreviewResult) -> Result<()> {
+    let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
+    for operation in &preview.operations {
+        let canonical_source = operation.source.canonicalize().map_err(|e| io(&operation.source, e))?;
+        if !canonical_source.starts_with(&canonical_root) {
+            return Err(SortSmithError::UnsafeDestination(operation.source.clone()));
+        }
+
+        let relative = operation.destination.strip_prefix(root).map_err(|_| SortSmithError::UnsafeDestination(operation.destination.clone()))?;
+        if relative.components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+            return Err(SortSmithError::UnsafeDestination(operation.destination.clone()));
+        }
+
+        let mut current = canonical_root.clone();
+        if let Some(parent) = relative.parent() {
+            for component in parent.components() {
+                current.push(component.as_os_str());
+                if current.exists() {
+                    let resolved = current.canonicalize().map_err(|e| io(&current, e))?;
+                    if !resolved.starts_with(&canonical_root) {
+                        return Err(SortSmithError::UnsafeDestination(operation.destination.clone()));
+                    }
+                    current = resolved;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn describe_file(root: &Path, path: &Path) -> Result<FileEntry> {
@@ -137,5 +170,41 @@ mod tests {
         let undo = undo_journal(&journal_path).unwrap();
         assert_eq!(undo.completed, 1);
         assert!(root.path().join("note.txt").exists());
+    }
+
+    #[test]
+    fn rejects_invalid_rules_before_scanning() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let mut invalid = txt_rule();
+        invalid.action = RuleAction::MoveTo { subdirectory: "../outside".into() };
+        assert!(preview_organization(root.path(), &[invalid], &ScanOptions::default()).is_err());
+    }
+
+    #[test]
+    fn journal_preflight_failure_does_not_move_files() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        let blocked_journal_dir = root.path().join("journal-blocker");
+        std::fs::write(&blocked_journal_dir, b"not a directory").unwrap();
+
+        assert!(execute_preview(root.path(), &preview, &blocked_journal_dir).is_err());
+        assert!(root.path().join("note.txt").exists());
+        assert!(!root.path().join("Text").join("note.txt").exists());
+    }
+
+    #[test]
+    fn forged_preview_cannot_move_outside_root() {
+        let root = tempdir().unwrap();
+        let journals = tempdir().unwrap();
+        std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
+        let mut preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        let outside = journals.path().join("escaped.txt");
+        preview.operations[0].destination = outside.clone();
+
+        assert!(execute_preview(root.path(), &preview, journals.path()).is_err());
+        assert!(root.path().join("note.txt").exists());
+        assert!(!outside.exists());
     }
 }
