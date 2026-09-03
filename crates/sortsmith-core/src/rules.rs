@@ -62,7 +62,7 @@ pub fn validate_rule(rule: &Rule) -> Result<()> {
                 }
             }
             RuleCriterion::NameRegex { pattern } => {
-                if pattern.is_empty() || pattern.len() > 1_024 {
+                if pattern.is_empty() || pattern.chars().count() > 1_024 {
                     return Err(SortSmithError::InvalidRule(format!("'{}' has an empty or oversized filename pattern", rule.name)));
                 }
                 Regex::new(pattern).map_err(|e| SortSmithError::InvalidRule(format!("invalid regex in '{}': {e}", rule.name)))?;
@@ -85,7 +85,7 @@ pub fn validate_rule(rule: &Rule) -> Result<()> {
 }
 
 fn validate_values(values: &[String], maximum: usize, label: &str, rule_name: &str) -> Result<()> {
-    if values.is_empty() || values.len() > maximum || values.iter().any(|value| value.trim().is_empty() || value.len() > 128) {
+    if values.is_empty() || values.len() > maximum || values.iter().any(|value| value.trim().is_empty() || value.chars().count() > 128) {
         return Err(SortSmithError::InvalidRule(format!("'{rule_name}' has invalid {label} values")));
     }
     Ok(())
@@ -188,5 +188,23 @@ mod tests {
         extensionless.relative_path = PathBuf::from("report");
         extensionless.extension = None;
         assert!(destination_for(Path::new("/tmp/root"), &extensionless, &candidate).is_err());
+    }
+
+    #[test]
+    fn accepts_128_unicode_characters_in_rule_values() {
+        let value = "é".repeat(128);
+        let candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
+        let mut candidate = candidate;
+        candidate.criteria = vec![RuleCriterion::Extension { values: vec![value] }];
+        assert!(validate_rule(&candidate).is_ok());
+    }
+
+    #[test]
+    fn rejects_129_unicode_characters_in_rule_values() {
+        let value = "é".repeat(129);
+        let candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
+        let mut candidate = candidate;
+        candidate.criteria = vec![RuleCriterion::Extension { values: vec![value] }];
+        assert!(validate_rule(&candidate).is_err());
     }
 }
