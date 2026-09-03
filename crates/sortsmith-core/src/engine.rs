@@ -2,9 +2,10 @@ use crate::error::io;
 use crate::journal::{load_journal, save_journal};
 use crate::models::*;
 use crate::rules::{destination_for, PreparedRule};
-use crate::safety::collision_safe_path;
+use crate::safety::{collision_safe_path, collision_safe_path_with_reserved};
 use crate::{Result, SortSmithError};
 use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path};
 use uuid::Uuid;
@@ -13,6 +14,7 @@ use walkdir::{DirEntry, WalkDir};
 pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) -> Result<PreviewResult> {
     let prepared_rules = rules.iter().filter(|rule| rule.enabled).map(PreparedRule::new).collect::<Result<Vec<_>>>()?;
     let mut result = PreviewResult::default();
+    let mut reserved_destinations = HashSet::new();
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
     for item in walker.into_iter().filter_entry(|e| options.include_hidden || !is_hidden(e, root)) {
@@ -30,8 +32,10 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
         for prepared in &prepared_rules {
             if prepared.matches(&file) {
                 let rule = prepared.rule();
-                let destination = collision_safe_path(&destination_for(root, &file, rule)?);
+                let desired = destination_for(root, &file, rule)?;
+                let destination = collision_safe_path_with_reserved(&desired, &reserved_destinations);
                 if destination != file.path {
+                    reserved_destinations.insert(destination.clone());
                     result.operations.push(PlannedOperation { id: Uuid::new_v4(), source: file.path.clone(), destination, rule_id: rule.id, rule_name: rule.name.clone(), size: file.size });
                     planned = true;
                 }
@@ -240,6 +244,18 @@ mod tests {
         assert!(execute_preview(root.path(), &preview, journals.path()).is_err());
         assert!(root.path().join("note.txt").exists());
         assert!(!outside.exists());
+    }
+
+    #[test]
+    fn preview_reserves_duplicate_destinations() {
+        let root = tempdir().unwrap();
+        std::fs::write(root.path().join("one.txt"), b"one").unwrap();
+        std::fs::write(root.path().join("two.txt"), b"two").unwrap();
+        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        assert_eq!(preview.operations.len(), 2);
+        assert_ne!(preview.operations[0].destination, preview.operations[1].destination);
+        assert_eq!(preview.operations[0].destination.file_name().unwrap(), "one.txt");
+        assert_eq!(preview.operations[1].destination.file_name().unwrap(), "two.txt");
     }
 
     #[test]
