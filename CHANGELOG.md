@@ -6,6 +6,26 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development continues on the next feature line.
 
+## [0.1.2] - 2026-09-03
+
+Patch release focused on journal durability and defense-in-depth for undo operations.
+
+### Fixed
+- Journal snapshots can now replace an existing journal file on platforms where `rename` does not overwrite an existing destination, including Windows.
+- Core undo now validates every recorded journal path against the journal's recorded root before performing any mutation.
+
+### Security
+- A forged operation journal that references paths outside its recorded root is rejected before undo begins.
+- Existing symlink-aware path containment checks remain in place for desktop execution and undo boundaries.
+
+### Tests
+- Added regression coverage for replacing an existing journal snapshot.
+- Added regression coverage proving that an out-of-root undo journal cannot mutate an external file.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.2`.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
+
 ## [0.1.1] - 2026-09-03
 
 Patch release focused on release metadata consistency and Unicode-safe rule validation.
