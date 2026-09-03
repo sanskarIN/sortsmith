@@ -15,6 +15,7 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
     let prepared_rules = rules.iter().filter(|rule| rule.enabled).map(PreparedRule::new).collect::<Result<Vec<_>>>()?;
     let mut result = PreviewResult::default();
     let mut reserved_destinations = HashSet::new();
+    let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
     for item in walker.into_iter().filter_entry(|e| options.include_hidden || !is_hidden(e, root)) {
@@ -24,6 +25,11 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
         };
         if !entry.file_type().is_file() { continue; }
         result.scanned_files += 1;
+        if options.follow_links && !entry.path().canonicalize().is_ok_and(|resolved| resolved.starts_with(&canonical_root)) {
+            result.recoverable_errors.push("A symbolic link points outside the selected folder; it was skipped.".into());
+            result.ignored_files += 1;
+            continue;
+        }
         let file = match describe_file(root, entry.path()) {
             Ok(f) => f,
             Err(err) => { result.recoverable_errors.push(err.to_string()); continue; }
@@ -281,5 +287,21 @@ mod tests {
 
         assert!(undo_journal(&path).is_err());
         assert!(destination.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preview_skips_file_symlink_that_resolves_outside_root() {
+        use std::os::unix::fs::symlink;
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        std::fs::write(outside.path().join("note.txt"), b"secret").unwrap();
+        symlink(outside.path().join("note.txt"), root.path().join("linked.txt")).unwrap();
+
+        let options = ScanOptions { recursive: false, include_hidden: false, follow_links: true, max_depth: Some(8) };
+        let preview = preview_organization(root.path(), &[txt_rule()], &options).unwrap();
+        assert!(preview.operations.is_empty());
+        assert_eq!(preview.ignored_files, 1);
+        assert!(preview.recoverable_errors.iter().any(|error| error.contains("symbolic link")));
     }
 }
