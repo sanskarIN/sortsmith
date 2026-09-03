@@ -73,6 +73,7 @@ pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path)
 
 pub fn undo_journal(journal_path: &Path) -> Result<ExecutionReport> {
     let journal = load_journal(journal_path)?;
+    validate_journal_paths(&journal)?;
     let mut completed = 0usize;
     let mut errors = Vec::new();
     for entry in journal.entries.iter().rev() {
@@ -116,6 +117,39 @@ fn validate_preview_paths(root: &Path, preview: &PreviewResult) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn validate_journal_paths(journal: &OperationJournal) -> Result<()> {
+    let canonical_root = journal.root.canonicalize().map_err(|e| io(&journal.root, e))?;
+    for entry in &journal.entries {
+        if !safe_journal_path(&canonical_root, &entry.from) || !safe_journal_path(&canonical_root, &entry.to) {
+            return Err(SortSmithError::UnsafeDestination(entry.to.clone()));
+        }
+    }
+    Ok(())
+}
+
+fn safe_journal_path(canonical_root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(canonical_root) else { return false; };
+    if relative.components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+        return false;
+    }
+    if path.exists() {
+        return path.canonicalize().is_ok_and(|resolved| resolved.starts_with(canonical_root));
+    }
+
+    let mut current = canonical_root.to_path_buf();
+    if let Some(parent) = relative.parent() {
+        for component in parent.components() {
+            current.push(component.as_os_str());
+            if current.exists() {
+                let Ok(resolved) = current.canonicalize() else { return false; };
+                if !resolved.starts_with(canonical_root) { return false; }
+                current = resolved;
+            }
+        }
+    }
+    true
 }
 
 fn describe_file(root: &Path, path: &Path) -> Result<FileEntry> {
@@ -206,5 +240,25 @@ mod tests {
         assert!(execute_preview(root.path(), &preview, journals.path()).is_err());
         assert!(root.path().join("note.txt").exists());
         assert!(!outside.exists());
+    }
+
+    #[test]
+    fn forged_journal_cannot_undo_outside_recorded_root() {
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let journal_dir = tempdir().unwrap();
+        let source = outside.path().join("secret.txt");
+        let destination = outside.path().join("moved.txt");
+        std::fs::write(&destination, b"secret").unwrap();
+        let journal = OperationJournal {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            root: root.path().to_path_buf(),
+            entries: vec![JournalEntry { operation_id: Uuid::new_v4(), from: source, to: destination.clone() }],
+        };
+        let path = save_journal(journal_dir.path(), &journal).unwrap();
+
+        assert!(undo_journal(&path).is_err());
+        assert!(destination.exists());
     }
 }
