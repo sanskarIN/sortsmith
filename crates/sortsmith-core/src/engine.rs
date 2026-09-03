@@ -249,13 +249,18 @@ mod tests {
     #[test]
     fn preview_reserves_duplicate_destinations() {
         let root = tempdir().unwrap();
-        std::fs::write(root.path().join("one.txt"), b"one").unwrap();
-        std::fs::write(root.path().join("two.txt"), b"two").unwrap();
-        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        std::fs::create_dir_all(root.path().join("first")).unwrap();
+        std::fs::create_dir_all(root.path().join("second")).unwrap();
+        std::fs::write(root.path().join("first").join("note.txt"), b"one").unwrap();
+        std::fs::write(root.path().join("second").join("note.txt"), b"two").unwrap();
+        let options = ScanOptions { recursive: true, include_hidden: false, follow_links: false, max_depth: Some(8) };
+        let preview = preview_organization(root.path(), &[txt_rule()], &options).unwrap();
         assert_eq!(preview.operations.len(), 2);
         assert_ne!(preview.operations[0].destination, preview.operations[1].destination);
-        assert_eq!(preview.operations[0].destination.file_name().unwrap(), "one.txt");
-        assert_eq!(preview.operations[1].destination.file_name().unwrap(), "two.txt");
+        let names = preview.operations.iter().map(|operation| operation.destination.file_name().unwrap().to_string_lossy().into_owned()).collect::<HashSet<_>>();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains("note.txt"));
+        assert!(names.contains("note (1).txt"));
     }
 
     #[test]
