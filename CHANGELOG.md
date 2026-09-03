@@ -4,7 +4,26 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 ## [Unreleased]
 
-### Added
+Development continues on the next feature line.
+
+## [0.1.1] - 2026-09-03
+
+Patch release focused on release metadata consistency and Unicode-safe rule validation.
+
+### Fixed
+- Rule value and filename-regex limits now count Unicode characters rather than UTF-8 bytes, so valid non-ASCII rules are not rejected prematurely.
+- Added regression coverage for 128-character and 129-character Unicode rule values.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.1`.
+- Prepared a dedicated `release/0.1.1` maintenance line from the final `0.1.0` source commit.
+- Kept the patch release scoped to maintenance changes so the later `0.2.x` and `0.3.x` feature lines remain distinct.
+
+## [0.1.0] - 2026-08-21
+
+Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
+
+### Included in the baseline
 - Production-oriented Rust/Tauri/React SortSmith baseline.
 - Rules for extension, MIME prefix, age, size, and filename regex, including a multi-criterion rule builder and reusable presets.
 - Saved user-defined preset management: snapshot active rules, load a preset into the active rule set, edit custom preset metadata, and safely delete presets that are not assigned to watched folders.
@@ -12,40 +31,9 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 - Duplicate detection with BLAKE3 and no automatic deletion.
 - Watched-folder automation with user-controlled presets and intervals while the desktop app is open.
 - Native folder selection plus native settings backup/import dialogs.
-- Keyboard-first quick actions for page navigation, folder selection, preview, apply, and undo, plus an in-app shortcut reference. Editing fields retain their normal keyboard behavior.
+- Keyboard-first quick actions for page navigation, folder selection, preview, apply, and undo, plus an in-app shortcut reference.
 - Schema-versioned local settings, bounded JSON persistence, and privacy-safe rotating operation logs.
 - Property-based core coverage for serialization, path traversal rejection, portable filenames, and rename-template extension preservation.
 - Criterion benchmark targets for organization planning and duplicate hashing using isolated synthetic directory fixtures.
 - Responsive light/dark/system UI with accessibility baseline and About/support/funding information.
-- Full project documentation, ADRs, contribution/security/privacy policies, CI, Dependabot, CodeQL for TypeScript and Rust, issue/PR templates, and cross-platform release automation.
-- Release metadata verification that rejects version tags inconsistent with Cargo, frontend, or Tauri versions.
-
-### Changed
-- Undo journal persistence and loading now stream JSON instead of allocating an additional whole-document byte buffer.
-- Execution verifies that undo-journal storage can be initialized before the first file mutation.
-- Frontend tooling declares the supported Node.js 22 and npm 10 runtime range.
-- Rejected settings/rule state is no longer activated optimistically in the running UI when persistence fails.
-- CI now runs desktop-host unit tests in addition to Rust checks, Clippy, core tests, frontend tests, type checking, and builds.
-- The Rules page now separates active-rule editing from durable user preset management instead of treating the first built-in preset as the only reusable rule source.
-
-### Accessibility
-- The active sidebar destination exposes `aria-current="page"` to assistive technologies.
-- Keyboard quick actions provide direct navigation and high-frequency organizer operations without stealing keys from form controls.
-- The shortcut reference is exposed as a modal dialog with a labelled heading and keyboard dismissal.
-- About exposes both business contacts, support, funding, license, version, and project credit.
-
-### Security
-- Root canonicalization and planned-operation containment checks exist in both the desktop boundary and core execution path.
-- Forged execution previews that point sources or destinations outside the selected root are rejected before mutation.
-- Parent traversal rejection and destination symlink escape protection.
-- No link-following during normal scans and no file-content/path data in structured operation logs.
-- Hidden directories are pruned during duplicate scans unless the user explicitly enables hidden-file scanning.
-- Rendered rename destinations reject non-portable filenames, Windows-reserved device names, unsafe characters, and overlong names.
-- Collision fallback never returns an already occupied destination after the normal numeric suffix range is exhausted.
-- Saved settings reject symlink-backed state files, enforce a 16 MiB storage/import contract, and sync temporary files before replacement.
-- Operation logs refuse symlink/non-file targets and rotate at 5 MiB to bound local growth.
-- Custom preset deletion is blocked while a watched-folder configuration still references that preset.
-
-## [0.1.0] - 2026-08-21
-
-Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
+- Full project documentation, ADRs, contribution/security/privacy policies, CI, Dependabot, CodeQL, issue/PR templates, and cross-platform release automation.
