@@ -6,6 +6,27 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development continues on the next feature line.
 
+## [0.1.4] - 2026-09-03
+
+Patch release focused on safe recursive preview behavior when symbolic links are followed.
+
+### Fixed
+- Preview mode now resolves a followed symbolic link before planning an operation and skips files whose resolved target is outside the selected root.
+- External symlink targets are reported as recoverable preview errors instead of producing operations that can only be rejected later during execution.
+- The existing execution-time canonical path boundary remains in place as defense-in-depth against forged or changed previews.
+
+### Security
+- Recursive scans with `follow_links` enabled no longer plan organization operations for files resolved outside the selected root.
+- Path containment uses filesystem canonicalization so symbolic links are resolved before the boundary decision. Rust's `canonicalize` resolves symbolic links and produces an absolute path. citeturn0search0
+
+### Tests
+- Added Unix regression coverage for a file symlink that points outside the selected root.
+- Existing duplicate-destination, journal-integrity, traversal, Unicode-rule, and filename-safety coverage remains in place.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.4`.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
+
 ## [0.1.3] - 2026-09-03
 
 Patch release focused on deterministic preview planning and collision safety.
