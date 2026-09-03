@@ -17,7 +17,7 @@ Patch release focused on safe recursive preview behavior when symbolic links are
 
 ### Security
 - Recursive scans with `follow_links` enabled no longer plan organization operations for files resolved outside the selected root.
-- Path containment uses filesystem canonicalization so symbolic links are resolved before the boundary decision. Rust's `canonicalize` resolves symbolic links and produces an absolute path. citeturn0search0
+- Path containment uses filesystem canonicalization so symbolic links are resolved before the boundary decision.
 
 ### Tests
 - Added Unix regression coverage for a file symlink that points outside the selected root.
