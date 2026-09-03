@@ -193,8 +193,7 @@ mod tests {
     #[test]
     fn accepts_128_unicode_characters_in_rule_values() {
         let value = "é".repeat(128);
-        let candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
-        let mut candidate = candidate;
+        let mut candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
         candidate.criteria = vec![RuleCriterion::Extension { values: vec![value] }];
         assert!(validate_rule(&candidate).is_ok());
     }
@@ -202,8 +201,7 @@ mod tests {
     #[test]
     fn rejects_129_unicode_characters_in_rule_values() {
         let value = "é".repeat(129);
-        let candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
-        let mut candidate = candidate;
+        let mut candidate = rule(RuleAction::MoveTo { subdirectory: "Text".into() });
         candidate.criteria = vec![RuleCriterion::Extension { values: vec![value] }];
         assert!(validate_rule(&candidate).is_err());
     }
