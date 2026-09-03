@@ -25,11 +25,22 @@ pub fn save_journal(dir: &Path, journal: &OperationJournal) -> Result<PathBuf> {
     writer.get_ref().sync_all().map_err(|e| io(&temp, e))?;
     drop(writer);
 
-    if let Err(error) = fs::rename(&temp, &target) {
-        let _ = fs::remove_file(&temp);
-        return Err(io(&target, error));
-    }
+    replace_journal_target(&temp, &target)?;
     Ok(target)
+}
+
+fn replace_journal_target(temp: &Path, target: &Path) -> Result<()> {
+    match fs::rename(temp, target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            fs::remove_file(target).map_err(|e| io(target, e))?;
+            fs::rename(temp, target).map_err(|e| io(target, e))
+        }
+        Err(error) => {
+            let _ = fs::remove_file(temp);
+            Err(io(target, error))
+        }
+    }
 }
 
 pub fn load_journal(path: &Path) -> Result<OperationJournal> {
@@ -46,23 +57,45 @@ mod tests {
     use tempfile::tempdir;
     use uuid::Uuid;
 
+    fn journal(dir: &Path, operation_id: Uuid) -> OperationJournal {
+        OperationJournal {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            root: dir.to_path_buf(),
+            entries: vec![JournalEntry {
+                operation_id,
+                from: dir.join("before.txt"),
+                to: dir.join("after.txt"),
+            }],
+        }
+    }
+
     #[test]
     fn journal_round_trip_uses_atomic_target_file() {
         let dir = tempdir().unwrap();
-        let journal = OperationJournal {
-            id: Uuid::new_v4(),
-            created_at: Utc::now(),
-            root: dir.path().to_path_buf(),
-            entries: vec![JournalEntry {
-                operation_id: Uuid::new_v4(),
-                from: dir.path().join("before.txt"),
-                to: dir.path().join("after.txt"),
-            }],
-        };
+        let journal = journal(dir.path(), Uuid::new_v4());
 
         let path = save_journal(dir.path(), &journal).unwrap();
         assert!(path.exists());
         assert!(!path.with_extension("journal.json.tmp").exists());
         assert_eq!(load_journal(&path).unwrap(), journal);
+    }
+
+    #[test]
+    fn saving_existing_journal_replaces_previous_snapshot() {
+        let dir = tempdir().unwrap();
+        let operation_id = Uuid::new_v4();
+        let first = journal(dir.path(), operation_id);
+        let path = save_journal(dir.path(), &first).unwrap();
+
+        let mut second = first.clone();
+        second.entries.push(JournalEntry {
+            operation_id: Uuid::new_v4(),
+            from: dir.path().join("another-before.txt"),
+            to: dir.path().join("another-after.txt"),
+        });
+        assert_eq!(save_journal(dir.path(), &second).unwrap(), path);
+        assert_eq!(load_journal(&path).unwrap(), second);
+        assert!(!path.with_extension("journal.json.tmp").exists());
     }
 }
