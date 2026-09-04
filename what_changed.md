@@ -40,17 +40,19 @@ The execution report also records absolute source and destination paths, keeping
 
 File moves no longer rely on `fs::rename` as the final collision boundary. On supported filesystems SortSmith first creates a hard link at the destination and then removes the source; when hard linking is unavailable or crosses filesystems it falls back to `create_new` plus streamed copy and source removal. Both approaches refuse an already-created destination instead of overwriting it.
 
-If a destination appears after preview but before execution, the engine now selects another collision-safe destination and retries up to eight times. Undo uses the same no-overwrite primitive, so a newly occupied original path cannot be silently replaced.
+If a destination appears after preview but before execution, the engine now selects another collision-safe destination and retries up to eight times, reporting an explicit error if those retries are exhausted. Undo uses the same no-overwrite primitive, so a newly occupied original path cannot be silently replaced.
 
-Regression coverage now creates a destination after preview and verifies the newly-created file is preserved while the source is moved to a collision-safe suffix.
+Regression coverage creates a destination after preview and verifies the newly-created file is preserved while the source is moved to a collision-safe suffix.
 
 ### Duplicate-scan root containment
 
 `crates/sortsmith-core/src/duplicates.rs` now applies the same external-symlink containment checks used by organization preview when duplicate scanning is configured to follow links. This prevents a linked directory outside the selected root from being traversed and hashed. A Unix regression test covers the external-directory case.
 
-### Desktop background-watch overlap prevention
+### Desktop background-watch reliability
 
 `apps/desktop/src/App.tsx` now guards the one-minute watched-folder timer against overlapping background invocations. A slow scan cannot be started again by the next timer tick while the previous background run is still active.
+
+`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit in the UI, preventing a known validation failure from being presented as an unexpected save error.
 
 ### Release-branch CI coverage
 
