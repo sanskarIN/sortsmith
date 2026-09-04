@@ -83,6 +83,7 @@ pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path)
             }
         }
         let mut moved = false;
+        let mut move_error = false;
         for _ in 0..8 {
             match move_without_overwrite(&op.source, &destination) {
                 Ok(()) => { moved = true; break; }
@@ -91,15 +92,20 @@ pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path)
                     if let Some(parent) = destination.parent() {
                         if let Err(parent_error) = fs::create_dir_all(parent) {
                             errors.push(format!("Could not create destination folder: {parent_error}"));
+                            move_error = true;
                             break;
                         }
                     }
                 }
                 Err(err) => {
                     errors.push(format!("Could not move a file: {err}"));
+                    move_error = true;
                     break;
                 }
             }
+        }
+        if !moved && !move_error {
+            errors.push("Could not find a collision-free destination after several retries.".into());
         }
         if moved {
             journal.entries.push(JournalEntry {
