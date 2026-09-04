@@ -106,7 +106,6 @@ export function RulesPage({ state, persist }: RulesPageProps) {
         action: compileAction(),
       };
       const customBase = state.rules.length ? state.rules : presetRules;
-      if (customBase.length >= 500) throw new Error("This build supports up to 500 active rules.");
       if (!await persist({ ...state, rules: [...customBase, rule] })) return;
       setName("");
       setMatchAll(true);
@@ -130,7 +129,6 @@ export function RulesPage({ state, persist }: RulesPageProps) {
 
   async function duplicateRule(rule: Rule) {
     const customBase = state.rules.length ? state.rules : presetRules;
-    if (customBase.length >= 500) { setError("This build supports up to 500 active rules."); return; }
     const copy: Rule = {
       ...rule,
       id: crypto.randomUUID(),
@@ -164,7 +162,7 @@ export function RulesPage({ state, persist }: RulesPageProps) {
       </div>
 
       <div className="input-row">
-        <button onClick={() => setCriteria(current => current.length >= 16 ? current : [...current, freshCriterion()])} disabled={criteria.length >= 16}>Add criterion</button>
+        <button onClick={() => setCriteria(current => [...current, freshCriterion()])}>Add criterion</button>
         <input value={actionValue} onChange={event => setActionValue(event.target.value)} aria-label="Action value" placeholder={actionPlaceholder(actionKind)}/>
         <button className="primary" onClick={() => void addRule()}>Add rule</button>
       </div>
