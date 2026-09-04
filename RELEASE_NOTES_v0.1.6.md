@@ -1,6 +1,6 @@
 # SortSmith v0.1.6 — Patch Release
 
-SortSmith v0.1.6 is a stable maintenance release that strengthens filesystem portability and regression coverage on the 0.1.x maintenance line.
+SortSmith v0.1.6 is a stable maintenance release that strengthens filesystem safety, crash recovery, duplicate scanning, automation reliability, and cross-platform filename handling on the 0.1.x maintenance line.
 
 ## Highlights
 
@@ -10,19 +10,39 @@ v0.1.5 introduced traversal-time pruning for symbolic-link directories whose res
 
 The regression scenario creates an external directory containing a nested matching file, links to that directory from inside the selected root, enables recursive scanning with link following, and verifies that no organization operation is planned and the external file is not scanned or modified.
 
+### Duplicate scanner containment
+
+Duplicate scanning now applies the same selected-root containment rule when link following is enabled. External symbolic-link directories are pruned before traversal, preventing content outside the selected folder from being hashed as part of a duplicate scan.
+
 ### Unicode Windows device-name protection
 
 Filename validation now rejects the Unicode superscript aliases recognized by Windows for numbered `COM` and `LPT` device names, such as `COM¹` and `LPT²`.
 
 This closes a portability edge case where a rendered rename could pass ordinary ASCII reserved-name checks while still mapping to a Windows device name.
 
+### Collision portability and race safety
+
+Collision reservation is case-insensitive on Windows, matching the platform's path semantics. Generated collision names are also fitted to the portable 255-byte and 255-UTF-16-unit filename limits.
+
+Execution no longer uses an overwriting `rename` as its final collision boundary. It uses a no-overwrite hard-link operation where supported, with a `create_new` streamed-copy fallback. If another process or user creates the planned destination after preview, SortSmith selects another collision-safe destination instead of replacing the newly-created file. Undo uses the same no-overwrite primitive.
+
+### Durable undo checkpoints
+
+Journal snapshots now normalize relative paths to absolute paths before serialization and synchronize the containing directory after atomic replacement on Unix-like systems.
+
+During multi-file execution, the journal is checkpointed after each successfully completed move. An interrupted batch therefore retains the moves completed before the interruption instead of waiting for the final batch save.
+
+### Watched-folder reliability
+
+The desktop timer prevents overlapping background watch invocations, and the automation screen resynchronizes its preset selection after saved state loads or preset availability changes. The UI also enforces the backend's 100-watched-folder limit before attempting a save.
+
 ## Why this matters
 
-Filesystem safety and cross-platform filename validation are security-sensitive boundaries. v0.1.6 makes the v0.1.5 traversal guarantee observable through the public API and closes a Windows filename portability edge case.
+Filesystem safety and cross-platform filename handling are security-sensitive boundaries for a file organizer. v0.1.6 closes several race and portability gaps while extending the existing symlink protections to duplicate scanning and making undo journals more durable during long-running batches.
 
 ## Compatibility
 
-No intentional breaking API change is introduced by this patch release. Existing valid filenames and organization rules continue to work normally.
+No intentional breaking API change is introduced by this patch release. Existing valid filenames and organization rules continue to work normally. The internal journal writer now normalizes relative paths when persisting snapshots; newly written journals therefore use absolute paths for reliable later validation.
 
 ## Version synchronization
 
@@ -43,9 +63,21 @@ cargo check --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 git diff --check
+git status --short
 ```
 
-For the desktop application, also run the normal typecheck, frontend tests, build, and Tauri build gates documented in `docs/release-v0.1.6-checklist.md`.
+For the desktop application, also run:
+
+```bash
+cd apps/desktop
+npm install --no-audit --no-fund
+npm run typecheck
+npm test
+npm run build
+npm run tauri build
+```
+
+The Unix symlink and journal durability tests should run on Unix-like CI, while the Windows-specific reserved-name and case-insensitive collision tests should run on Windows CI.
 
 ## Release metadata
 
@@ -59,8 +91,8 @@ For the desktop application, also run the normal typecheck, frontend tests, buil
 
 ## Upgrade guidance
 
-Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is particularly useful for workflows using recursive symbolic links and for users who need portable filename validation across Windows and Unix-like systems.
+Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is particularly useful for workflows using recursive symbolic links, duplicate scanning, collision-heavy organization, long filenames, and reversible multi-file operations.
 
 ## Release status
 
-Repository-side preparation is complete after the implementation, regression coverage, synchronized metadata, changelog, release notes, checklist, and handoff updates are committed. Local builds and cross-platform artifact validation must still pass before the `v0.1.6` tag is published.
+Repository-side preparation includes the implementation fixes, regression coverage, synchronized metadata, changelog, release notes, checklist, and handoff updates. Local builds and cross-platform artifact validation have **not** been claimed as passed because this environment cannot execute the repository's Rust/Node/Tauri toolchains. The `v0.1.6` tag should be published only after the validation commands above pass in CI or on the owner's release machine.
