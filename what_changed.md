@@ -26,13 +26,37 @@ The collision planner now also bounds generated suffix candidates to the portabl
 
 Regression coverage now verifies both Windows case-insensitive reservation and long-filename collision generation.
 
-### Journal durability hardening
+### Journal durability and path normalization
 
-`crates/sortsmith-core/src/journal.rs` now synchronizes the journal directory after the temporary journal has been atomically replaced. The journal payload was already flushed and synced before replacement; syncing the containing directory adds the missing filesystem metadata durability step on Unix-like platforms. A Unix regression test exercises the new durability path.
+`crates/sortsmith-core/src/journal.rs` now synchronizes the journal directory after the temporary journal has been atomically replaced. The journal payload was already flushed and synced before replacement; syncing the containing directory adds the missing filesystem metadata durability step on Unix-like platforms.
+
+Journal snapshots now normalize relative root and entry paths to absolute paths before serialization. This prevents an undo journal created through the core API with relative paths from becoming impossible to validate later because the undo preflight compares against a canonical absolute root. A regression test covers the normalization behavior.
+
+### Crash recovery journal checkpoints
+
+`crates/sortsmith-core/src/engine.rs` now saves the journal after every successfully completed move instead of waiting until the entire batch finishes. A crash during a multi-file operation therefore leaves the journal containing all moves that were completed before the interruption.
+
+The execution report also records absolute source and destination paths, keeping the in-memory report consistent with the durable journal format.
+
+### No-overwrite move safety
+
+File moves no longer rely on `fs::rename` as the final collision boundary. On supported filesystems SortSmith first creates a hard link at the destination and then removes the source; when hard linking is unavailable or crosses filesystems it falls back to `create_new` plus streamed copy and source removal. Both approaches refuse an already-created destination instead of overwriting it.
+
+If a destination appears after preview but before execution, the engine now selects another collision-safe destination and retries a bounded number of times. Undo uses the same no-overwrite primitive, so a newly occupied original path cannot be silently replaced.
+
+Regression coverage verifies that a destination created after planning is never overwritten.
+
+### Duplicate-scan root containment
+
+`crates/sortsmith-core/src/duplicates.rs` now applies the same external-symlink containment checks used by organization preview when duplicate scanning is configured to follow links. This prevents a linked directory outside the selected root from being traversed and hashed. A Unix regression test covers the external-directory case.
+
+### Desktop background-watch overlap prevention
+
+`apps/desktop/src/App.tsx` now guards the one-minute watched-folder timer against overlapping background invocations. A slow scan cannot be started again by the next timer tick while the previous background run is still active.
 
 ### CI coverage for maintenance branches
 
-`.github/workflows/ci.yml` now runs on `release/**` pushes as well as `main`. This makes the maintenance release branch itself subject to the core format/clippy/tests, desktop Rust checks, and frontend typecheck/test/build gates instead of waiting until a merge or tag-triggered release workflow.
+`.github/workflows/ci.yml` runs on `release/**` pushes as well as `main`. This makes the maintenance release branch itself subject to the core format/clippy/tests, desktop Rust checks, and frontend typecheck/test/build gates instead of waiting until a merge or tag-triggered release workflow.
 
 ### Release metadata
 
@@ -43,17 +67,15 @@ Version `0.1.6` is synchronized across the Rust workspace, desktop package, and 
 - `CHANGELOG.md` records the stable v0.1.6 maintenance release and the collision portability fix.
 - `RELEASE_NOTES_v0.1.6.md` contains the stable release body.
 - `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
-- This handoff records the actual implementation and documentation work.
-
-## Important history note
-
-Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work includes the symlink integration regression coverage, Unicode Windows device-name validation, Windows case-insensitive reserved-destination collision handling, portable collision-name generation, and journal directory durability. CI maintenance-branch coverage is release engineering rather than product functionality.
+- This handoff records the actual implementation, bug-fix, and documentation work.
 
 ## Verification status
 
-Repository-side implementation and release documentation are prepared. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this connected environment does not provide the project checkout/toolchains needed to execute them truthfully.
+The repository has been reviewed and additional source-level defects were fixed directly on the maintenance branch. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this connected environment does not provide the project checkout/toolchains needed to execute them truthfully.
 
-Run the following before publication:
+The CI workflow is configured to run for `release/**` pushes, but the GitHub connector available in this environment does not expose a complete check-run listing for arbitrary push workflow executions. Therefore no CI result is fabricated here.
+
+Before publication, run the full validation suite from the release branch:
 
 ```bash
 git checkout release/0.1.6
@@ -74,7 +96,7 @@ npm run build
 npm run tauri build
 ```
 
-The Unix public symlink regression and Windows-specific collision test should execute on their respective platforms as part of the workspace test suite.
+The Unix symlink regressions and Windows-specific collision test should execute on their respective platforms as part of the workspace test suite.
 
 ## Stable release procedure
 
