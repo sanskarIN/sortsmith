@@ -49,8 +49,13 @@ fn contains_invalid_filename_character(value: &str) -> bool {
 fn is_windows_reserved_name(filename: &str) -> bool {
     let stem = filename.split('.').next().unwrap_or(filename).trim_end_matches([' ', '.']).to_ascii_uppercase();
     matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || stem.strip_prefix("COM").is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
-        || stem.strip_prefix("LPT").is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
+        || is_windows_numbered_device_name(&stem, "COM")
+        || is_windows_numbered_device_name(&stem, "LPT")
+}
+
+fn is_windows_numbered_device_name(stem: &str, prefix: &str) -> bool {
+    let Some(suffix) = stem.strip_prefix(prefix) else { return false; };
+    matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")
 }
 
 pub fn collision_safe_path(destination: &Path) -> PathBuf {
@@ -113,6 +118,13 @@ mod tests {
         assert!(validate_filename("report. ", "filename").is_err());
         assert!(validate_filename("report.", "filename").is_err());
         assert!(validate_filename("report-final.txt", "filename").is_ok());
+    }
+
+    #[test]
+    fn rejects_unicode_windows_reserved_device_names() {
+        assert!(validate_filename("COM¹.txt", "filename").is_err());
+        assert!(validate_filename("LPT²", "filename").is_err());
+        assert!(validate_filename("COM0.txt", "filename").is_ok());
     }
 
     #[test]
