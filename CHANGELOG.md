@@ -6,6 +6,23 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development continues on the next feature line.
 
+## [0.1.6] - 2026-09-04
+
+Stable maintenance release focused on strengthening the public integration-test contract for recursive symbolic-link traversal safety and keeping release metadata synchronized.
+
+### Added
+- Added a Unix integration test through the public `sortsmith-core` API covering a recursive scan with `follow_links` enabled and an external symbolic-link directory.
+- The integration test verifies that an external linked directory produces no planned organization operation and that its nested external file is not counted as scanned.
+
+### Quality
+- Promoted the v0.1.5 symlink traversal protection into public API-level regression coverage, reducing the chance that future refactors bypass the scanner boundary.
+- Kept the test focused on observable preview behavior rather than private implementation details.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.6`.
+- Prepared a dedicated `release/0.1.6` maintenance branch from `release/0.1.5`.
+- Prepared stable v0.1.6 release notes and publication checklist.
+
 ## [0.1.5] - 2026-09-04
 
 Stable maintenance patch focused on preventing recursive traversal from escaping the selected folder through symbolic-link directories.
@@ -84,7 +101,7 @@ Patch release focused on journal durability and defense-in-depth for undo operat
 
 ### Release Engineering
 - Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.2`.
-- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later `0.2.x` feature line.
 
 ## [0.1.1] - 2026-09-03
 
