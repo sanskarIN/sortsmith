@@ -13,10 +13,11 @@ pub fn save_journal(dir: &Path, journal: &OperationJournal) -> Result<PathBuf> {
     fs::create_dir_all(dir).map_err(|e| io(dir, e))?;
     let target = journal_path(dir, journal.id);
     let temp = target.with_extension("journal.json.tmp");
+    let journal = normalize_journal_paths(journal)?;
 
     let file = File::create(&temp).map_err(|e| io(&temp, e))?;
     let mut writer = BufWriter::new(file);
-    if let Err(error) = serde_json::to_writer_pretty(&mut writer, journal) {
+    if let Err(error) = serde_json::to_writer_pretty(&mut writer, &journal) {
         drop(writer);
         let _ = fs::remove_file(&temp);
         return Err(error.into());
@@ -28,6 +29,43 @@ pub fn save_journal(dir: &Path, journal: &OperationJournal) -> Result<PathBuf> {
     replace_journal_target(&temp, &target)?;
     sync_journal_directory(dir)?;
     Ok(target)
+}
+
+fn normalize_journal_paths(journal: &OperationJournal) -> Result<OperationJournal> {
+    let root = make_absolute(&journal.root)?;
+    let entries = journal
+        .entries
+        .iter()
+        .map(|entry| crate::models::JournalEntry {
+            operation_id: entry.operation_id,
+            from: make_absolute_from(&journal.root, &entry.from)?,
+            to: make_absolute_from(&journal.root, &entry.to)?,
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(OperationJournal {
+        id: journal.id,
+        created_at: journal.created_at,
+        root,
+        entries,
+    })
+}
+
+fn make_absolute(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        std::env::current_dir().map(|dir| dir.join(path)).map_err(|e| io(path, e))
+    }
+}
+
+fn make_absolute_from(root: &Path, path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        let base = make_absolute(root)?;
+        Ok(base.join(path))
+    }
 }
 
 fn replace_journal_target(temp: &Path, target: &Path) -> Result<()> {
@@ -108,6 +146,28 @@ mod tests {
         assert_eq!(save_journal(dir.path(), &second).unwrap(), path);
         assert_eq!(load_journal(&path).unwrap(), second);
         assert!(!path.with_extension("journal.json.tmp").exists());
+    }
+
+    #[test]
+    fn relative_journal_paths_are_stored_as_absolute_paths() {
+        let root = tempdir().unwrap();
+        let journal = OperationJournal {
+            id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            root: root.path().join(".").to_path_buf(),
+            entries: vec![JournalEntry {
+                operation_id: Uuid::new_v4(),
+                from: PathBuf::from("relative-before.txt"),
+                to: PathBuf::from("relative-after.txt"),
+            }],
+        };
+
+        let path = save_journal(root.path(), &journal).unwrap();
+        let stored = load_journal(&path).unwrap();
+        assert!(stored.root.is_absolute());
+        assert!(stored.entries[0].from.is_absolute());
+        assert!(stored.entries[0].to.is_absolute());
+        assert!(stored.entries[0].from.starts_with(stored.root.parent().unwrap_or(&stored.root)));
     }
 
     #[cfg(unix)]
