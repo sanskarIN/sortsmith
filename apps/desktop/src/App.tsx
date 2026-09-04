@@ -66,7 +66,19 @@ function App() {
   }, [state.settings]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => { backend.runDueWatches().catch(() => undefined); }, 60_000);
+    let running = false;
+    const run = async () => {
+      if (running) return;
+      running = true;
+      try {
+        await backend.runDueWatches();
+      } catch {
+        // A failed background watch is reported on its next explicit run.
+      } finally {
+        running = false;
+      }
+    };
+    const timer = window.setInterval(() => { void run(); }, 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
