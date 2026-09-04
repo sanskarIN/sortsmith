@@ -13,71 +13,72 @@
 
 ## v0.1.7 implementation completed
 
-### Cached preview traversal safety
+### Deterministic duplicate results
 
-The performance-oriented cached organization preview in `crates/sortsmith-core/src/scan_cache.rs` now applies the same selected-root boundary used by the primary preview implementation. When `follow_links` is enabled, symbolic-link entries are resolved before cached metadata is reused or collected, and entries whose targets resolve outside the selected root are pruned before traversal can inspect an external tree.
+`crates/sortsmith-core/src/duplicates.rs` now sorts the paths inside each duplicate group before returning the result. Duplicate groups already have stable size/hash ordering; this change also makes their member ordering stable.
 
-This closes a consistency gap: the primary organization and duplicate-scanning paths had external-symlink protection, while the later in-memory cached planner had its own WalkDir traversal and therefore needed the same security boundary.
-
-### Cached preview collision safety
-
-Cached preview planning now maintains a `HashSet` of reserved destinations for the current preview and uses `collision_safe_path_with_reserved`. Multiple source directories containing the same filename can therefore target one destination folder without receiving the same planned destination.
-
-Collision resolution continues to be recomputed against the live filesystem on every preview, including cache hits, so destinations created after an earlier preview are still detected.
+This prevents filesystem traversal order and Rayon hashing completion order from leaking into the returned API result. Repeated scans over the same unchanged directory therefore present duplicate members in the same path order.
 
 ### Regression coverage
 
-Added cache regressions for:
+Added `duplicate_files_are_sorted_by_path`, which creates two equal-content files in reverse lexical creation order and verifies that the returned duplicate group is ordered lexically by path.
 
-- external symbolic-link directory traversal with `follow_links` enabled on Unix;
-- duplicate source filenames converging on one destination folder;
-- existing collision recomputation after a cache hit.
+Existing coverage remains for equal-content detection without deletion, hidden-directory pruning, and external symbolic-link directories when link following is enabled.
 
-Existing cache coverage for unchanged-file reuse, changed-file rescans, deletion pruning, rule-scope resets, explicit clearing, and time-sensitive rule revalidation remains in place.
+### Maintenance-line scope
+
+The in-memory `scan_cache.rs` work belongs to the later 0.3.0 feature-development line and was deliberately removed from `release/0.1.7`. This keeps the 0.1.x patch release focused on a small compatibility-safe maintenance fix instead of backporting an entire later feature.
+
+The corresponding cached-preview hardening remains on `main`, where the 0.3.0 scan-cache feature lives.
 
 ## v0.1.7 release engineering
 
-The dedicated `release/0.1.7` branch was created from `release/0.1.6` and now contains:
+The dedicated `release/0.1.7` branch was created from `release/0.1.6` and contains the implementation fix, version synchronization, release documentation, checklist, and handoff updates.
 
-- cached-preview safety/collision implementation;
-- synchronized `0.1.7` versions in `Cargo.toml`, `apps/desktop/package.json`, and `apps/desktop/src-tauri/tauri.conf.json`;
-- `CHANGELOG.md` entry;
-- `RELEASE_NOTES_v0.1.7.md`;
-- `docs/release-v0.1.7-checklist.md`.
+Version `0.1.7` is synchronized across:
 
-The same v0.1.7 source hardening and release documentation have also been mirrored onto `main`, while `main` remains correctly on its later `0.3.0` version line.
+- `Cargo.toml`
+- `apps/desktop/package.json`
+- `apps/desktop/src-tauri/tauri.conf.json`
+
+Release support files are present:
+
+- `CHANGELOG.md`
+- `RELEASE_NOTES_v0.1.7.md`
+- `docs/release-v0.1.7-checklist.md`
+- `what_changed.md`
 
 ## v0.1.6 implementation and bug-fix audit
 
 ### Public API-level symlink traversal coverage
 
-The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 adds a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` that exercises `preview_organization` and verifies an external linked directory produces no planned operation and no scanned nested external file.
+The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 added a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` covering this behavior through `preview_organization`.
 
 ### Windows filename portability hardening
 
-`crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
+`crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names such as `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
 
-The collision planner treats reserved destination paths case-insensitively on Windows and bounds generated suffix candidates to portable filename limits.
+Reserved destination comparison is case-insensitive on Windows. Generated collision names are bounded to the portable 255-byte and 255-UTF-16-unit filename limits.
 
 ### Journal durability and path normalization
 
-`crates/sortsmith-core/src/journal.rs` synchronizes the journal directory after atomic replacement on Unix-like systems. Journal snapshots normalize relative root and entry paths to absolute paths before serialization.
+Journal snapshots normalize relative root and entry paths to absolute paths and synchronize the journal directory after atomic replacement on Unix-like systems.
 
 ### Crash recovery journal checkpoints
 
-`crates/sortsmith-core/src/engine.rs` saves the journal after every successfully completed move so completed operations remain recoverable if a multi-file batch is interrupted.
+The execution engine saves the journal after each successfully completed move, reducing the amount of completed work that can be lost if a multi-file operation is interrupted.
 
 ### No-overwrite move safety
 
-File moves and undo moves use a no-overwrite hard-link path with a `create_new` streamed-copy fallback rather than relying on overwriting `rename` behavior. Execution retries collision-safe destinations when a destination becomes occupied after preview.
+File moves and undo moves use a no-overwrite hard-link path with a `create_new` streamed-copy fallback instead of relying on an overwriting `rename` boundary. Execution retries collision-safe destinations when a destination becomes occupied after preview.
 
 ### Duplicate-scan root containment
 
-`crates/sortsmith-core/src/duplicates.rs` applies the selected-root external-symlink boundary when duplicate scanning follows links.
+Duplicate scanning prunes symbolic-link entries whose resolved targets are outside the selected root when link following is enabled.
 
 ### Desktop reliability
 
-The watched-folder timer prevents overlapping background invocations. Automation preset state is resynchronized after asynchronous loads/deletions, and persistence success/failure is propagated to rule, preset, history, and settings-backup UI flows.
+Watched-folder background execution prevents overlapping timer-triggered scans. Automation preset selection is resynchronized after asynchronous state loading/deletion, and persistence success/failure is propagated to rule, preset, history, and settings-backup UI flows.
 
 ### Release-branch CI coverage
 
@@ -85,9 +86,11 @@ The watched-folder timer prevents overlapping background invocations. Automation
 
 ## Main-branch integration status
 
-The historical `release/0.1.6` maintenance line was integrated into `main` with a real two-parent merge while preserving main's `0.3.0` version metadata. The later v0.1.7 cached-preview hardening is now also present directly on `main`.
+The historical `release/0.1.6` maintenance line was integrated into `main` with a real two-parent merge while preserving main's `0.3.0` version metadata.
 
-`main` therefore contains the maintenance-line filesystem hardening plus the newer 0.3.0 feature-development line. The dedicated `release/0.1.7` branch remains the correct source for the v0.1.7 tag because its version metadata is 0.1.7.
+The later v0.1.7 duplicate-result determinism fix is now also present directly on `main` as a compatible source change. The cached-preview safety/collision hardening remains on `main` as part of the 0.3.0 scan-cache feature.
+
+`main` therefore contains the maintenance-line safety hardening plus the newer 0.3.0 feature-development line. The dedicated `release/0.1.7` branch remains the correct source for the v0.1.7 tag because its version metadata is 0.1.7.
 
 ## Version integrity
 
@@ -96,13 +99,13 @@ The historical `release/0.1.6` maintenance line was integrated into `main` with 
 - Do not tag `main` as `v0.1.7`.
 - The `v0.1.7` tag must be created from `release/0.1.7` after validation.
 
-## Validation status
+## Verification status
 
-The GitHub-side source and documentation changes have been made. Local Rust, Node.js, Tauri, installer, and cross-platform builds have **not** been claimed as passed because this environment does not provide a trustworthy local project checkout and full toolchain execution path.
+GitHub-side source and documentation changes have been completed. Local Rust, Node.js, Tauri, installer, and cross-platform builds have **not** been claimed as passed because this environment does not provide a trustworthy local project checkout and complete toolchain execution path.
 
 The available GitHub connector does not expose a complete check-run listing for arbitrary push workflow executions, so no CI result is fabricated here.
 
-Before publication, run:
+Before publication, run the complete release validation from `release/0.1.7`:
 
 ```bash
 git checkout release/0.1.7
@@ -123,7 +126,7 @@ npm run build
 npm run tauri build
 ```
 
-The Unix cached-preview symlink regression should run on Unix-like CI. Full application packaging should be validated on Linux, Windows, and macOS.
+The deterministic duplicate-ordering regression must pass as part of the core test suite. Full application packaging should be validated on Linux, Windows, and macOS.
 
 ## v0.1.7 publication procedure
 
@@ -139,9 +142,9 @@ git tag -a v0.1.7 -m "SortSmith v0.1.7"
 git push origin v0.1.7
 ```
 
-The tag-triggered release workflow is configured to create a draft release. Review the generated artifacts and release body before publishing.
+The tag-triggered release workflow is configured to create a draft release. Review the generated Linux/Windows/macOS artifacts and draft release before publishing.
 
-Recommended metadata:
+Recommended release metadata:
 
 - Tag: `v0.1.7`
 - Target: `release/0.1.7`
@@ -152,4 +155,4 @@ Recommended metadata:
 
 ## Release status
 
-As of this handoff, `v0.1.7` has **not** been published. The release branch and release materials are prepared, but the tag and GitHub release should only be created after the validation gates pass.
+As of this handoff, `v0.1.7` has **not** been published. The release branch and release materials are prepared, but the tag and GitHub release must be created only after the validation gates pass.
