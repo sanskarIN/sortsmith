@@ -122,6 +122,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unicode_filename_that_exceeds_windows_utf16_limit() {
+        let name = format!("{}x.txt", "😀".repeat(126));
+        assert!(name.as_bytes().len() <= 255);
+        assert!(name.chars().count() <= 255);
+        assert!(name.encode_utf16().count() > 255);
+        assert!(validate_filename(&name, "filename").is_err());
+    }
+
+    #[test]
+    fn accepts_unicode_filename_within_utf16_limit() {
+        let name = format!("{}x.txt", "😀".repeat(124));
+        assert!(name.encode_utf16().count() <= 255);
+        assert!(validate_filename(&name, "filename").is_ok());
+    }
+
+    #[test]
     fn collision_path_preserves_extension() {
         let dir = tempdir().unwrap();
         let existing = dir.path().join("report.pdf");
