@@ -18,6 +18,12 @@
 - [x] Changelog entry added
 - [x] Release notes added
 - [x] Public API-level symlink traversal regression test added
+- [x] Duplicate-scanner external-symlink regression added
+- [x] Relative journal-path regression added
+- [x] Post-preview collision regression added
+- [x] No-overwrite move primitive added for execution and undo
+- [x] Background watched-folder overlap guard added
+- [x] Automation preset-selection synchronization added
 - [x] `what_changed.md` updated
 
 ## Core validation
@@ -42,6 +48,15 @@ crates/sortsmith-core/tests/external_symlink_traversal.rs
 
 It verifies that recursive preview with `follow_links` enabled does not traverse an external symlink directory or plan operations for files beneath it.
 
+Additional core cases that must be covered by the workspace tests include:
+
+- Relative-root execution produces an absolute, undoable journal.
+- A destination created after preview is preserved and the source is moved to a collision-safe suffix.
+- Generated collision filenames remain within portable filename limits.
+- Windows reserved-name and case-insensitive collision behavior passes on Windows CI.
+- Duplicate scanning does not traverse an external symlink directory.
+- Journal replacement and directory durability tests pass on their supported platforms.
+
 ## Desktop validation
 
 ```bash
@@ -52,6 +67,13 @@ npm test
 npm run build
 npm run tauri build
 ```
+
+Also manually verify that:
+
+- [ ] A slow watched-folder run cannot overlap with the next timer tick.
+- [ ] Preset selection becomes available after saved state finishes loading.
+- [ ] Adding a watched folder at the 100-folder limit is rejected before persistence.
+- [ ] A failed settings save does not get described to the user as a successful change.
 
 ## Cross-platform gate
 
