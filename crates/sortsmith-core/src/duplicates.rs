@@ -40,7 +40,10 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
     let mut groups: Vec<_> = grouped
         .into_iter()
         .filter(|(_, files)| files.len() > 1)
-        .map(|((size, hash), files)| DuplicateGroup { hash, size, files: files.into_iter().map(|path| DuplicateFile { path, size }).collect() })
+        .map(|((size, hash), mut files)| {
+            files.sort();
+            DuplicateGroup { hash, size, files: files.into_iter().map(|path| DuplicateFile { path, size }).collect() }
+        })
         .collect();
     groups.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| a.hash.cmp(&b.hash)));
     Ok(groups)
@@ -88,6 +91,20 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].files.len(), 2);
         assert!(dir.path().join("a.bin").exists());
+    }
+
+    #[test]
+    fn duplicate_files_are_sorted_by_path() {
+        let dir = tempdir().unwrap();
+        let first = dir.path().join("z-last.bin");
+        let second = dir.path().join("a-first.bin");
+        std::fs::write(&first, b"same").unwrap();
+        std::fs::write(&second, b"same").unwrap();
+
+        let groups = find_duplicates(dir.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].files[0].path, second);
+        assert_eq!(groups[0].files[1].path, first);
     }
 
     #[test]
