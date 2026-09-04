@@ -1,6 +1,6 @@
 # SortSmith v0.1.6 — Patch Release
 
-SortSmith v0.1.6 is a stable maintenance release that strengthens regression coverage around recursive symbolic-link traversal safety and keeps the 0.1.x maintenance line independently verifiable.
+SortSmith v0.1.6 is a stable maintenance release that strengthens filesystem portability and regression coverage on the 0.1.x maintenance line.
 
 ## Highlights
 
@@ -8,23 +8,21 @@ SortSmith v0.1.6 is a stable maintenance release that strengthens regression cov
 
 v0.1.5 introduced traversal-time pruning for symbolic-link directories whose resolved targets are outside the selected organization root. v0.1.6 adds an integration test through the public `sortsmith-core` API so this security boundary is protected by externally observable behavior rather than only an internal unit test.
 
-The regression scenario creates an external directory containing a nested matching file, links to that directory from inside the selected root, enables recursive scanning with link following, and verifies that:
+The regression scenario creates an external directory containing a nested matching file, links to that directory from inside the selected root, enables recursive scanning with link following, and verifies that no organization operation is planned and the external file is not scanned or modified.
 
-- no organization operation is planned;
-- the nested external file is not counted as scanned;
-- the external file remains untouched.
+### Unicode Windows device-name protection
 
-The test is Unix-specific because it exercises the platform symbolic-link API directly.
+Filename validation now rejects the Unicode superscript aliases recognized by Windows for numbered `COM` and `LPT` device names, such as `COM¹` and `LPT²`.
+
+This closes a portability edge case where a rendered rename could pass ordinary ASCII reserved-name checks while still mapping to a Windows device name.
 
 ## Why this matters
 
-Filesystem-boundary protections are security-sensitive and can be weakened accidentally during future refactoring. Keeping a public API-level regression test makes the intended contract explicit: recursive preview must not turn an external symbolic-link directory into an in-root organization candidate.
+Filesystem safety and cross-platform filename validation are security-sensitive boundaries. v0.1.6 makes the v0.1.5 traversal guarantee observable through the public API and closes a Windows filename portability edge case.
 
 ## Compatibility
 
-No intentional breaking API change is introduced by this patch release.
-
-The behavior established in v0.1.5 is preserved: when `follow_links` is enabled, symbolic-link entries resolving outside the selected root are pruned before recursive traversal can descend into their targets.
+No intentional breaking API change is introduced by this patch release. Existing valid filenames and organization rules continue to work normally.
 
 ## Version synchronization
 
@@ -36,7 +34,7 @@ The following release metadata is synchronized to `0.1.6`:
 
 ## Validation
 
-Before publishing the tag, run the project's release validation commands, including:
+Before publishing the tag, run:
 
 ```bash
 node scripts/verify-release-version.mjs v0.1.6
@@ -61,8 +59,8 @@ For the desktop application, also run the normal typecheck, frontend tests, buil
 
 ## Upgrade guidance
 
-Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is especially useful for projects that depend on the recursive symlink-boundary guarantees introduced in v0.1.5.
+Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is particularly useful for workflows using recursive symbolic links and for users who need portable filename validation across Windows and Unix-like systems.
 
 ## Release status
 
-The repository-side release preparation is complete when the version metadata, tests, changelog, release notes, checklist, and handoff record are committed. Local builds and cross-platform artifact validation must still be performed in a suitable development environment before the tag is published.
+Repository-side preparation is complete after the implementation, regression coverage, synchronized metadata, changelog, release notes, checklist, and handoff updates are committed. Local builds and cross-platform artifact validation must still pass before the `v0.1.6` tag is published.
