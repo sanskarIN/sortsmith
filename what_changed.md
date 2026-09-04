@@ -20,9 +20,15 @@ The v0.1.5 implementation prevents recursive traversal into symbolic-link direct
 
 `crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
 
-The same collision planner now treats reserved destination paths case-insensitively on Windows. This matters because Windows path comparison is case-insensitive while `HashSet<PathBuf>` equality is not. Without this normalization, two preview operations could reserve differently cased spellings of the same Windows destination and converge on one physical path.
+The collision planner treats reserved destination paths case-insensitively on Windows. This matters because Windows path comparison is case-insensitive while `HashSet<PathBuf>` equality is not. Without this normalization, two preview operations could reserve differently cased spellings of the same Windows destination and converge on one physical path.
 
-A Windows-specific regression test covers differently cased reserved paths and verifies that the next collision suffix is selected.
+The collision planner now also bounds generated suffix candidates to the portable filename limits. When a source stem is already near the 255-byte or 255-UTF-16-unit boundary, a naive `name (1)` suffix would exceed the limit. v0.1.6 fits the stem to the remaining byte/unit budget before creating the candidate and trims an unsafe trailing space or period from the fitted stem.
+
+Regression coverage now verifies both Windows case-insensitive reservation and long-filename collision generation.
+
+### CI coverage for maintenance branches
+
+`.github/workflows/ci.yml` now runs on `release/**` pushes as well as `main`. This makes the maintenance release branch itself subject to the core format/clippy/tests, desktop Rust checks, and frontend typecheck/test/build gates instead of waiting until a merge or tag-triggered release workflow.
 
 ### Release metadata
 
@@ -30,14 +36,14 @@ Version `0.1.6` is synchronized across the Rust workspace, desktop package, and 
 
 ## v0.1.6 documentation
 
-- `CHANGELOG.md` records the stable v0.1.6 maintenance release.
+- `CHANGELOG.md` records the stable v0.1.6 maintenance release and the collision portability fix.
 - `RELEASE_NOTES_v0.1.6.md` contains the stable release body.
 - `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
 - This handoff records the actual implementation and documentation work.
 
 ## Important history note
 
-Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work for this continuation is the symlink integration regression coverage, Unicode Windows device-name validation, and Windows case-insensitive reserved-destination collision handling.
+Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work includes the symlink integration regression coverage, Unicode Windows device-name validation, Windows case-insensitive reserved-destination collision handling, and portable collision-name generation. CI maintenance-branch coverage is release engineering rather than product functionality.
 
 ## Verification status
 
