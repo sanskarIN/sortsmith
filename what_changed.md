@@ -48,11 +48,13 @@ Regression coverage creates a destination after preview and verifies the newly-c
 
 `crates/sortsmith-core/src/duplicates.rs` now applies the same external-symlink containment checks used by organization preview when duplicate scanning is configured to follow links. This prevents a linked directory outside the selected root from being traversed and hashed. A Unix regression test covers the external-directory case.
 
-### Desktop background-watch reliability
+### Desktop background-watch and persistence reliability
 
 `apps/desktop/src/App.tsx` now guards the one-minute watched-folder timer against overlapping background invocations. A slow scan cannot be started again by the next timer tick while the previous background run is still active.
 
-`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit in the UI, preventing a known validation failure from being presented as an unexpected save error.
+`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit in the UI.
+
+`apps/desktop/src/App.tsx` now returns a success/failure result from state persistence instead of swallowing the result. Rule and preset editors, history, and settings backup import use that result so a failed write is not presented as a successful change.
 
 ### Release-branch CI coverage
 
