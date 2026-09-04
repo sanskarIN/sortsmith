@@ -1,22 +1,17 @@
 # SortSmith v0.1.7 — Patch Release
 
-SortSmith v0.1.7 is a stable 0.1.x maintenance release that hardens cached preview planning so the performance path preserves the filesystem safety and collision guarantees of the primary preview engine.
+SortSmith v0.1.7 is a stable 0.1.x maintenance release that makes duplicate-detection output deterministic without changing duplicate matching or deletion behavior.
 
 ## Highlights
 
-- Cached organization preview now prunes followed symbolic links whose resolved targets are outside the selected root.
-- Cached preview performs selected-root containment checks before reusing metadata for followed links.
-- Cached preview reserves destinations across the current plan, preventing duplicate source filenames from converging on one destination.
-- Added Unix regression coverage for external symlink traversal through the cached preview path.
-- Added collision regression coverage for duplicate source filenames and retained cache invalidation/collision-recomputation coverage.
-
-## Security
-
-This release closes a consistency gap between the cached and primary preview paths. Execution and undo remain independently protected by their existing path-containment and no-overwrite safeguards.
+- Duplicate-group member paths are sorted before results are returned.
+- Stable member ordering prevents filesystem traversal and parallel hashing order from leaking into API/UI results.
+- Added regression coverage that verifies equal-content duplicate files are returned in lexical path order.
+- Existing content-equality, hidden-directory, and external-symlink traversal protections remain unchanged.
 
 ## Compatibility
 
-No intentional breaking public API change is introduced. The scan cache remains an in-memory optimization and does not change the persisted journal format.
+No intentional breaking public API change is introduced. Duplicate detection continues to use BLAKE3, requires equal file size and content for grouping, and never deletes files automatically.
 
 ## Release metadata
 
@@ -30,7 +25,7 @@ No intentional breaking public API change is introduced. The scan cache remains 
 
 ## Validation
 
-Run the full Rust and desktop validation suite before publishing:
+Run the complete release suite before publishing:
 
 ```bash
 node scripts/verify-release-version.mjs v0.1.7
@@ -48,8 +43,8 @@ npm run build
 npm run tauri build
 ```
 
-Cross-platform CI should exercise Linux, Windows, and macOS builds. The Unix symlink regression requires a Unix-like runner.
+Cross-platform CI should exercise Linux, Windows, and macOS builds before publishing production installers.
 
 ## Status
 
-The v0.1.7 maintenance fix and release documentation are present on both the dedicated release line and `main`. Local toolchain execution has not been claimed as passed in this environment; publish only after CI or an equivalent release-machine validation is green.
+The v0.1.7 maintenance fix and release documentation are present on the dedicated release line and mirrored on `main`. Local toolchain execution has not been claimed as passed in this environment; publish only after CI or equivalent release-machine validation is green.
