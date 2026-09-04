@@ -1,14 +1,34 @@
 # SortSmith — Work Handoff
 
-## Current active workstream: v0.1.6 stable release
+## Current active workstream: v0.1.7 stable release
 
-- Release branch: `release/0.1.6`
-- Base: `release/0.1.5`
-- Target version: `0.1.6`
+- Release branch: `release/0.1.7`
+- Base: `release/0.1.6`
+- Target version: `0.1.7`
 - Repository: `https://github.com/sanskarIN/sortsmith`
 - Default branch: `main`
 - License: Apache-2.0
 - Commit identity requested for project work: `Sanskar <sanskarin@outlook.in>`
+
+## v0.1.7 implementation and bug-fix audit
+
+### Cached preview traversal safety
+
+The performance-oriented cached organization preview in `crates/sortsmith-core/src/scan_cache.rs` now applies the same selected-root boundary used by the primary preview implementation. When `follow_links` is enabled, symbolic-link entries are resolved before cached metadata is reused or collected, and entries whose targets resolve outside the selected root are pruned before traversal can inspect an external tree.
+
+This closes a maintenance-line consistency gap: v0.1.5/v0.1.6 hardened the primary organization and duplicate-scanning paths, but the cached preview introduced later had its own WalkDir traversal and therefore needed the same external-symlink guard.
+
+### Cached preview collision safety
+
+Cached preview planning now maintains a `HashSet` of reserved destinations for the current preview and uses `collision_safe_path_with_reserved`. This keeps cached previews deterministic when multiple source directories contain the same filename and all rules target one destination directory.
+
+Collision resolution is still recomputed against the live filesystem on every preview, including cache hits, so a destination created after a previous preview remains visible to the next planning pass.
+
+### Regression coverage
+
+`scan_cache.rs` now covers an external symlink directory on Unix with `follow_links` enabled. The regression verifies that no operation is planned and the nested external file is not scanned.
+
+The cache suite also now covers duplicate source filenames converging on one destination, while retaining existing tests for unchanged-file reuse, collision recomputation, rule-scope changes, changed-file rescans, deleted-file pruning, explicit cache clearing, and time-sensitive rule revalidation.
 
 ## v0.1.6 implementation and bug-fix audit
 
@@ -52,7 +72,7 @@ Regression coverage creates a destination after preview and verifies the newly-c
 
 `apps/desktop/src/App.tsx` now guards the one-minute watched-folder timer against overlapping background invocations. A slow scan cannot be started again by the next timer tick while the previous background run is still active.
 
-`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit in the UI.
+`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit.
 
 `apps/desktop/src/App.tsx` now returns a success/failure result from state persistence instead of swallowing the result. Rule and preset editors, history, and settings backup import use that result so a failed write is not presented as a successful change.
 
@@ -64,29 +84,32 @@ Regression coverage creates a destination after preview and verifies the newly-c
 
 The earlier `rules.rs` formatting-only refactor was reverted to the release/0.1.5 formatting baseline. This removes unrelated churn from the release diff and leaves the v0.1.6 branch focused on actual safety, durability, traversal, and release-engineering changes.
 
-### Release metadata
+## Release metadata
 
-Version `0.1.6` remains synchronized across the Rust workspace, desktop package, and Tauri application configuration.
+Version `0.1.7` is synchronized across:
 
-## v0.1.6 documentation
+- `Cargo.toml`
+- `apps/desktop/package.json`
+- `apps/desktop/src-tauri/tauri.conf.json`
 
-- `CHANGELOG.md` records the stable v0.1.6 maintenance release and collision portability work.
-- `RELEASE_NOTES_v0.1.6.md` contains the stable release body.
-- `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
-- This handoff records the actual implementation and bug-fix audit work.
+The v0.1.7 branch also contains:
+
+- `CHANGELOG.md`
+- `RELEASE_NOTES_v0.1.7.md`
+- `docs/release-v0.1.7-checklist.md`
 
 ## Verification status
 
-The repository has been reviewed and additional source-level defects were fixed directly on `release/0.1.6`. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this environment cannot provide a truthful local project checkout/toolchain execution.
+The repository has been reviewed and the cached-preview safety/collision defects were fixed directly on `release/0.1.7`. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this environment cannot provide a truthful local project checkout/toolchain execution.
 
 The CI workflow is configured to run for `release/**` pushes. The available GitHub connector does not expose a complete check-run listing for arbitrary push workflow executions, so no CI result is fabricated here.
 
 Before publication, run the full validation suite from the release branch:
 
 ```bash
-git checkout release/0.1.6
-git pull origin release/0.1.6
-node scripts/verify-release-version.mjs v0.1.6
+git checkout release/0.1.7
+git pull --ff-only origin release/0.1.7
+node scripts/verify-release-version.mjs v0.1.7
 cargo fmt --all -- --check
 cargo check --workspace
 cargo test --workspace
@@ -102,37 +125,31 @@ npm run build
 npm run tauri build
 ```
 
-The Unix symlink regressions and Windows-specific collision test should execute on their respective platforms as part of the workspace test suite.
+The Unix symlink regressions should execute on Unix-like CI, and the complete workspace plus desktop suite should be exercised on Linux, Windows, and macOS before publishing production artifacts.
 
 ## Stable release procedure
 
 After validation passes:
 
 ```bash
-git checkout release/0.1.6
-git pull origin release/0.1.6
-node scripts/verify-release-version.mjs v0.1.6
+git checkout release/0.1.7
+git pull --ff-only origin release/0.1.7
+node scripts/verify-release-version.mjs v0.1.7
 git diff --check
 git status --short
-git tag -a v0.1.6 -m "SortSmith v0.1.6"
-git push origin v0.1.6
+git tag -a v0.1.7 -m "SortSmith v0.1.7"
+git push origin v0.1.7
 ```
+
+The tag should be created from `release/0.1.7`, not from `main`, because `main` is on the later 0.3.0 feature line.
 
 Then review the tag-triggered release workflow, generated Linux/Windows/macOS artifacts, and draft GitHub release before publishing.
 
 Recommended release metadata:
 
-- Tag: `v0.1.6`
-- Target: `release/0.1.6`
-- Title: `SortSmith v0.1.6 — Patch Release`
+- Tag: `v0.1.7`
+- Target: `release/0.1.7`
+- Title: `SortSmith v0.1.7 — Patch Release`
 - Pre-release: disabled
 - Latest: disabled
-- Body: `RELEASE_NOTES_v0.1.6.md`
-
-The available GitHub integration can modify repository files and branches but does not expose tag creation or GitHub release publication. Therefore the final tag push and publication remain an owner-side step after validation.
-
-Do not claim v0.1.6 is published until the tag and GitHub release can be independently verified.
-
-## Maintenance-line boundary
-
-Keep the 0.1.x maintenance branch separate from modern `main`, which is already on a later feature-development line. Do not merge the maintenance branch into modern main merely to advance the patch version.
+- Body: `RELEASE_NOTES_v0.1.7.md`
