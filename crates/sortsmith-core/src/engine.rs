@@ -281,18 +281,22 @@ mod tests {
     }
 
     #[test]
-    fn move_does_not_overwrite_a_destination_created_after_preview() {
+    fn post_preview_destination_collision_is_never_overwritten() {
         let root = tempdir().unwrap();
+        let journals = tempdir().unwrap();
         let source = root.path().join("note.txt");
         let destination = root.path().join("Text").join("note.txt");
-        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
         std::fs::write(&source, b"source").unwrap();
-        std::fs::write(&destination, b"newer").unwrap();
+        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        assert_eq!(preview.operations.len(), 1);
 
-        let result = move_without_overwrite(&source, &destination);
-        assert!(result.is_err());
-        assert_eq!(std::fs::read(&source).unwrap(), b"source");
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::write(&destination, b"newer").unwrap();
+        let report = execute_preview(root.path(), &preview, journals.path()).unwrap();
+
+        assert_eq!(report.completed, 1);
         assert_eq!(std::fs::read(&destination).unwrap(), b"newer");
+        assert_eq!(std::fs::read(root.path().join("Text").join("note (1).txt")).unwrap(), b"source");
     }
 
     #[test]
