@@ -1,7 +1,7 @@
 use crate::engine::describe_file_from_metadata;
 use crate::models::{FileEntry, PlannedOperation, PreviewResult, Rule, RuleCriterion, ScanOptions};
 use crate::rules::{destination_for, PreparedRule};
-use crate::safety::collision_safe_path;
+use crate::safety::collision_safe_path_with_reserved;
 use crate::Result;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -72,10 +72,20 @@ pub fn preview_organization_cached(
     cache.prepare_scope(root, rules, options);
     let mut result = PreviewResult::default();
     let mut seen = HashSet::new();
+    let mut reserved_destinations = HashSet::new();
+    let canonical_root = root.canonicalize().map_err(|e| crate::error::io(root, e))?;
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
 
-    for item in walker.into_iter().filter_entry(|entry| options.include_hidden || !is_hidden(entry, root)) {
+    for item in walker.into_iter().filter_entry(|entry| {
+        if !options.include_hidden && is_hidden(entry, root) {
+            return false;
+        }
+        if options.follow_links && entry_resolves_outside_root(entry, &canonical_root) == Some(true) {
+            return false;
+        }
+        true
+    }) {
         let entry = match item {
             Ok(value) => value,
             Err(error) => {
@@ -86,6 +96,12 @@ pub fn preview_organization_cached(
         if !entry.file_type().is_file() { continue; }
 
         result.scanned_files += 1;
+        if options.follow_links && !entry_within_root(entry.path(), &canonical_root) {
+            result.recoverable_errors.push("A symbolic link points outside the selected folder; it was skipped.".into());
+            result.ignored_files += 1;
+            continue;
+        }
+
         let path = entry.path().to_path_buf();
         let metadata = match entry.metadata() {
             Ok(value) => value,
@@ -126,8 +142,10 @@ pub fn preview_organization_cached(
             continue;
         };
         let rule = prepared_rules[rule_index].rule();
-        let destination = collision_safe_path(&destination_for(root, &file, rule)?);
+        let desired = destination_for(root, &file, rule)?;
+        let destination = collision_safe_path_with_reserved(&desired, &reserved_destinations);
         if destination != file.path {
+            reserved_destinations.insert(destination.clone());
             result.operations.push(PlannedOperation {
                 id: Uuid::new_v4(),
                 source: file.path.clone(),
@@ -144,6 +162,15 @@ pub fn preview_organization_cached(
     cache.entries.retain(|path, _| seen.contains(path));
     cache.stats.cached_entries = cache.entries.len();
     Ok(result)
+}
+
+fn entry_resolves_outside_root(entry: &DirEntry, canonical_root: &Path) -> Option<bool> {
+    if !entry.file_type().is_symlink() { return Some(false); }
+    entry.path().canonicalize().ok().map(|resolved| !resolved.starts_with(canonical_root))
+}
+
+fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
+    path.canonicalize().is_ok_and(|resolved| resolved.starts_with(canonical_root))
 }
 
 fn first_matching_rule(prepared_rules: &[PreparedRule<'_>], file: &FileEntry) -> Option<usize> {
@@ -241,6 +268,23 @@ mod tests {
     }
 
     #[test]
+    fn cached_preview_reserves_duplicate_destinations() {
+        let root = tempdir().unwrap();
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(first.join("note.txt"), b"first").unwrap();
+        std::fs::write(second.join("note.txt"), b"second").unwrap();
+        let rule = extension_rule("Text", "Text");
+        let mut cache = ScanCache::default();
+
+        let preview = preview_organization_cached(root.path(), &[rule], &ScanOptions { recursive: true, max_depth: Some(3), ..ScanOptions::default() }, &mut cache).unwrap();
+        assert_eq!(preview.operations.len(), 2);
+        assert_ne!(preview.operations[0].destination, preview.operations[1].destination);
+    }
+
+    #[test]
     fn rule_changes_reset_cache_scope() {
         let root = tempdir().unwrap();
         std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
@@ -323,5 +367,27 @@ mod tests {
 
         assert_eq!(cache.stats().reused_files, 1);
         assert_eq!(cache.stats().revalidated_time_sensitive_files, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_symlink_directory_is_not_traversed_by_cached_preview() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let external_dir = outside.path().join("external");
+        std::fs::create_dir_all(&external_dir).unwrap();
+        std::fs::write(external_dir.join("secret.txt"), b"outside").unwrap();
+        symlink(&external_dir, root.path().join("linked")).unwrap();
+
+        let rule = extension_rule("Text", "Text");
+        let mut cache = ScanCache::default();
+        let options = ScanOptions { recursive: true, follow_links: true, max_depth: Some(5), ..ScanOptions::default() };
+        let preview = preview_organization_cached(root.path(), &[rule], &options, &mut cache).unwrap();
+
+        assert!(preview.operations.is_empty());
+        assert_eq!(preview.scanned_files, 0);
+        assert!(!preview.recoverable_errors.iter().any(|error| error.contains("secret.txt")));
     }
 }
