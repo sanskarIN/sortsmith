@@ -1,38 +1,24 @@
 # SortSmith v0.1.7 — Patch Release
 
-SortSmith v0.1.7 is a stable maintenance release for the 0.1.x line. It hardens the in-memory cached preview path so cached previews preserve the same filesystem safety and collision-planning guarantees as the non-cached preview engine.
+SortSmith v0.1.7 is a stable maintenance release for the 0.1.x line. It makes duplicate-detection output deterministic without changing duplicate matching or deletion behavior.
 
 ## Highlights
 
-### Cached preview symlink containment
+### Deterministic duplicate results
 
-The cached organization preview now applies the selected-root boundary while traversing with `follow_links` enabled. Symbolic-link files and directories whose resolved targets are outside the selected root are pruned before cached metadata is reused or new metadata is collected.
+Duplicate groups are now normalized by sorting the file paths inside each duplicate group before the result is returned. The group ordering already follows stable size/hash ordering; v0.1.7 completes the deterministic ordering by making the member list stable as well.
 
-This closes a consistency gap where the normal preview path already rejected external symlink traversal, while the performance-oriented cached path could otherwise inspect entries outside the selected root.
-
-### Cached preview collision reservation
-
-Cached preview planning now reserves destinations already assigned earlier in the same preview and uses the same collision-safe reservation primitive as the normal planner.
-
-Two files with the same name discovered from different source directories therefore cannot receive the same destination merely because the preview was served through the cache.
+This prevents filesystem traversal and parallel hashing order from leaking into the UI or downstream consumers. Repeated scans over the same unchanged directory now return duplicate members in the same path order.
 
 ### Regression coverage
 
-The release adds focused cache regressions for:
+The release adds a focused regression that creates two equal-content files in reverse lexical creation order and verifies that the duplicate group is returned in lexical path order.
 
-- external symbolic-link directory traversal with `follow_links` enabled;
-- duplicate source filenames converging on one destination folder;
-- continued collision recomputation when a cached file is reused.
-
-Existing cache invalidation, rule-scope, deletion-pruning, time-sensitive-rule, and full-rescan coverage remains in place.
-
-## Security impact
-
-The cached preview path now follows the same selected-root traversal boundary as the primary preview implementation. No automatic deletion behavior is introduced, and execution/undo safety remains enforced independently of preview planning.
+Existing coverage for content equality, hidden-directory handling, and external symbolic-link traversal remains in place.
 
 ## Compatibility
 
-No intentional breaking public API change is introduced by this patch release. The scan cache remains an in-memory optimization and does not change the persisted journal format.
+No intentional breaking public API change is introduced. Duplicate detection still uses BLAKE3, still requires equal file size and content before grouping, and still never deletes files automatically.
 
 ## Version synchronization
 
@@ -67,7 +53,7 @@ npm run build
 npm run tauri build
 ```
 
-The Unix external-symlink regression should execute on Unix-like CI. The full workspace suite should be run on Linux, Windows, and macOS before publishing production installers.
+The full workspace and desktop suite should be exercised on Linux, Windows, and macOS before publishing production installers.
 
 ## Release metadata
 
@@ -81,4 +67,4 @@ The Unix external-symlink regression should execute on Unix-like CI. The full wo
 
 ## Release status
 
-Repository-side preparation includes the cached-preview safety fix, collision regression coverage, synchronized version metadata, changelog, release notes, checklist, and handoff updates. Local Rust/Node/Tauri execution has not been claimed as passed in this environment. Publish the tag only after the validation gates pass in CI or on the release machine.
+Repository-side preparation includes the deterministic duplicate-ordering fix, regression coverage, synchronized version metadata, changelog, release notes, checklist, and handoff updates. Local Rust/Node/Tauri execution has not been claimed as passed in this environment. Publish the tag only after the validation gates pass in CI or on the release machine.
