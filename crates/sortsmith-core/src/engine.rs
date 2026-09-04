@@ -18,14 +18,19 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
     let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
     let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
-    for item in walker.into_iter().filter_entry(|e| options.include_hidden || !is_hidden(e, root)) {
+    for item in walker.into_iter().filter_entry(|e| {
+        if !options.include_hidden && is_hidden(e, root) {
+            return false;
+        }
+        options.follow_links && entry_resolves_outside_root(e, &canonical_root) == Some(true).then_some(false).unwrap_or(true)
+    }) {
         let entry = match item {
             Ok(v) => v,
             Err(err) => { result.recoverable_errors.push(redact_walk_error(&err)); continue; }
         };
         if !entry.file_type().is_file() { continue; }
         result.scanned_files += 1;
-        if options.follow_links && !entry.path().canonicalize().is_ok_and(|resolved| resolved.starts_with(&canonical_root)) {
+        if options.follow_links && !entry_within_root(entry.path(), &canonical_root) {
             result.recoverable_errors.push("A symbolic link points outside the selected folder; it was skipped.".into());
             result.ignored_files += 1;
             continue;
@@ -51,6 +56,15 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
         if !planned { result.ignored_files += 1; }
     }
     Ok(result)
+}
+
+fn entry_resolves_outside_root(entry: &DirEntry, canonical_root: &Path) -> Option<bool> {
+    if !entry.file_type().is_symlink() { return Some(false); }
+    entry.path().canonicalize().ok().map(|resolved| !resolved.starts_with(canonical_root))
+}
+
+fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
+    path.canonicalize().is_ok_and(|resolved| resolved.starts_with(canonical_root))
 }
 
 pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path) -> Result<ExecutionReport> {
@@ -303,5 +317,22 @@ mod tests {
         assert!(preview.operations.is_empty());
         assert_eq!(preview.ignored_files, 1);
         assert!(preview.recoverable_errors.iter().any(|error| error.contains("symbolic link")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preview_prunes_external_symlink_directories_before_traversal() {
+        use std::os::unix::fs::symlink;
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        std::fs::create_dir_all(outside.path().join("nested")).unwrap();
+        std::fs::write(outside.path().join("nested").join("note.txt"), b"secret").unwrap();
+        symlink(outside.path(), root.path().join("external")).unwrap();
+
+        let options = ScanOptions { recursive: true, include_hidden: false, follow_links: true, max_depth: Some(32) };
+        let preview = preview_organization(root.path(), &[txt_rule()], &options).unwrap();
+        assert!(preview.operations.is_empty());
+        assert_eq!(preview.scanned_files, 0);
+        assert_eq!(preview.ignored_files, 0);
     }
 }
