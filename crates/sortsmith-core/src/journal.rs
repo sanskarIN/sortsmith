@@ -26,6 +26,7 @@ pub fn save_journal(dir: &Path, journal: &OperationJournal) -> Result<PathBuf> {
     drop(writer);
 
     replace_journal_target(&temp, &target)?;
+    sync_journal_directory(dir)?;
     Ok(target)
 }
 
@@ -41,6 +42,16 @@ fn replace_journal_target(temp: &Path, target: &Path) -> Result<()> {
             Err(io(target, error))
         }
     }
+}
+
+#[cfg(unix)]
+fn sync_journal_directory(dir: &Path) -> Result<()> {
+    File::open(dir).map_err(|e| io(dir, e))?.sync_all().map_err(|e| io(dir, e))
+}
+
+#[cfg(not(unix))]
+fn sync_journal_directory(_dir: &Path) -> Result<()> {
+    Ok(())
 }
 
 pub fn load_journal(path: &Path) -> Result<OperationJournal> {
@@ -97,5 +108,17 @@ mod tests {
         assert_eq!(save_journal(dir.path(), &second).unwrap(), path);
         assert_eq!(load_journal(&path).unwrap(), second);
         assert!(!path.with_extension("journal.json.tmp").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saving_journal_syncs_the_parent_directory_after_replace() {
+        let dir = tempdir().unwrap();
+        let journal = journal(dir.path(), Uuid::new_v4());
+
+        let path = save_journal(dir.path(), &journal).unwrap();
+        let directory = File::open(dir.path()).unwrap();
+        directory.sync_all().unwrap();
+        assert!(path.exists());
     }
 }
