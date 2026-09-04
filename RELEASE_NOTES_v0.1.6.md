@@ -32,9 +32,11 @@ Journal snapshots now normalize relative paths to absolute paths before serializ
 
 During multi-file execution, the journal is checkpointed after each successfully completed move. An interrupted batch therefore retains the moves completed before the interruption instead of waiting for the final batch save.
 
-### Watched-folder reliability
+### Watched-folder and settings reliability
 
 The desktop timer prevents overlapping background watch invocations, and the automation screen resynchronizes its preset selection after saved state loads or preset availability changes. The UI also enforces the backend's 100-watched-folder limit before attempting a save.
+
+State persistence now reports its success or failure back to the rule editor, preset manager, history screen, and settings backup importer. These surfaces no longer clear local form state or display a successful operation when the underlying settings write failed.
 
 ## Why this matters
 
@@ -91,7 +93,7 @@ The Unix symlink and journal durability tests should run on Unix-like CI, while 
 
 ## Upgrade guidance
 
-Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is particularly useful for workflows using recursive symbolic links, duplicate scanning, collision-heavy organization, long filenames, and reversible multi-file operations.
+Users on the 0.1.x maintenance line can upgrade to v0.1.6 after the published release artifacts have been reviewed. This release is particularly useful for workflows using recursive symbolic links, duplicate scanning, collision-heavy organization, long filenames, reversible multi-file operations, and watched-folder automation.
 
 ## Release status
 
