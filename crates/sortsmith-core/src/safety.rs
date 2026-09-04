@@ -63,7 +63,7 @@ pub fn collision_safe_path(destination: &Path) -> PathBuf {
 }
 
 pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<PathBuf>) -> PathBuf {
-    if !destination.exists() && !reserved.contains(destination) {
+    if !destination.exists() && !reserved_contains(reserved, destination) {
         return destination.to_path_buf();
     }
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
@@ -75,7 +75,7 @@ pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<
             None => format!("{stem} ({n})"),
         };
         let candidate = parent.join(filename);
-        if !candidate.exists() && !reserved.contains(&candidate) {
+        if !candidate.exists() && !reserved_contains(reserved, &candidate) {
             return candidate;
         }
     }
@@ -87,10 +87,21 @@ pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<
             None => format!("{stem} ({suffix})"),
         };
         let candidate = parent.join(filename);
-        if !candidate.exists() && !reserved.contains(&candidate) {
+        if !candidate.exists() && !reserved_contains(reserved, &candidate) {
             return candidate;
         }
     }
+}
+
+#[cfg(windows)]
+fn reserved_contains(reserved: &HashSet<PathBuf>, candidate: &Path) -> bool {
+    let candidate = candidate.to_string_lossy().to_lowercase();
+    reserved.iter().any(|path| path.to_string_lossy().to_lowercase() == candidate)
+}
+
+#[cfg(not(windows))]
+fn reserved_contains(reserved: &HashSet<PathBuf>, candidate: &Path) -> bool {
+    reserved.contains(candidate)
 }
 
 #[cfg(test)]
@@ -167,5 +178,17 @@ mod tests {
         reserved.insert(dir.path().join("report (1).pdf"));
         let candidate = collision_safe_path_with_reserved(&desired, &reserved);
         assert_eq!(candidate.file_name().unwrap(), "report (2).pdf");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reserved_collision_path_is_case_insensitive_on_windows() {
+        let dir = tempdir().unwrap();
+        let desired = dir.path().join("Report.txt");
+        let mut reserved = HashSet::new();
+        reserved.insert(dir.path().join("report.txt"));
+        reserved.insert(dir.path().join("REPORT (1).txt"));
+        let candidate = collision_safe_path_with_reserved(&desired, &reserved);
+        assert_eq!(candidate.file_name().unwrap(), "Report (2).txt");
     }
 }
