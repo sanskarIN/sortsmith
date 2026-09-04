@@ -7,7 +7,7 @@ use crate::{Result, SortSmithError};
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
@@ -69,7 +69,8 @@ fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
 
 pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path) -> Result<ExecutionReport> {
     validate_preview_paths(root, preview)?;
-    let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: root.to_path_buf(), entries: Vec::new() };
+    let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
+    let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: canonical_root, entries: Vec::new() };
     save_journal(journal_dir, &journal)?;
     let mut errors = Vec::new();
     for op in &preview.operations {
@@ -80,19 +81,34 @@ pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path)
                 continue;
             }
         }
-        match fs::rename(&op.source, &destination) {
-            Ok(()) => journal.entries.push(JournalEntry { operation_id: op.id, from: op.source.clone(), to: destination }),
-            Err(rename_error) if rename_error.kind() == std::io::ErrorKind::CrossesDevices => {
-                match copy_then_remove(&op.source, &destination) {
-                    Ok(()) => journal.entries.push(JournalEntry { operation_id: op.id, from: op.source.clone(), to: destination }),
-                    Err(err) => errors.push(format!("Could not move a file across devices: {err}")),
+        let result = match fs::rename(&op.source, &destination) {
+            Ok(()) => Ok(()),
+            Err(rename_error) if rename_error.kind() == std::io::ErrorKind::CrossesDevices => copy_then_remove(&op.source, &destination).map_err(|err| format!("Could not move a file across devices: {err}")),
+            Err(err) => Err(format!("Could not move a file: {err}")),
+        };
+        match result {
+            Ok(()) => {
+                journal.entries.push(JournalEntry {
+                    operation_id: op.id,
+                    from: absolute_path(&op.source)?,
+                    to: absolute_path(&destination)?,
+                });
+                if let Err(err) = save_journal(journal_dir, &journal) {
+                    errors.push(format!("A completed move could not be durably recorded in the undo journal: {err}"));
+                    break;
                 }
             }
-            Err(err) => errors.push(format!("Could not move a file: {err}")),
+            Err(err) => errors.push(err),
         }
     }
-    save_journal(journal_dir, &journal)?;
     Ok(ExecutionReport { completed: journal.entries.len(), journal, errors })
+}
+
+fn absolute_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    std::env::current_dir().map(|dir| dir.join(path)).map_err(|e| io(path, e))
 }
 
 pub fn undo_journal(journal_path: &Path) -> Result<ExecutionReport> {
@@ -228,6 +244,25 @@ mod tests {
         let undo = undo_journal(&journal_path).unwrap();
         assert_eq!(undo.completed, 1);
         assert!(root.path().join("note.txt").exists());
+    }
+
+    #[test]
+    fn relative_root_execution_produces_an_undoable_absolute_journal() {
+        let parent = tempdir().unwrap();
+        let root = parent.path().join("workspace");
+        let journals = parent.path().join("journals");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("note.txt"), b"hello").unwrap();
+        let relative_root = std::path::PathBuf::from(".").join(root.strip_prefix(std::env::current_dir().unwrap()).unwrap_or(&root));
+        let preview = preview_organization(&root, &[txt_rule()], &ScanOptions::default()).unwrap();
+        let report = execute_preview(&root, &preview, &journals).unwrap();
+        assert!(report.journal.root.is_absolute());
+        assert!(report.journal.entries[0].from.is_absolute());
+        assert!(report.journal.entries[0].to.is_absolute());
+        assert!(relative_root.components().next().is_some());
+        let journal_path = journals.join(format!("{}.journal.json", report.journal.id));
+        assert_eq!(undo_journal(&journal_path).unwrap().completed, 1);
+        assert!(root.join("note.txt").exists());
     }
 
     #[test]
