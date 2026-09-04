@@ -75,34 +75,69 @@ Patch release focused on safe recursive preview behavior when symbolic links are
 
 ## [0.1.3] - 2026-09-03
 
-Patch release focused on deterministic collision handling during preview planning.
+Patch release focused on deterministic preview planning and collision safety.
 
 ### Fixed
-- Preview now reserves destinations selected for earlier operations, preventing duplicate source filenames from converging on the same destination when multiple files are organized in one run.
+- Preview planning now reserves destinations already assigned to earlier operations in the same preview.
+- Multiple files with the same filename in different source directories no longer receive the same planned destination when recursive organization targets one folder.
+- Collision-safe suffixes are now reflected directly in the preview instead of being discovered only while executing the plan.
 
 ### Tests
-- Added regression coverage for duplicate filenames discovered from different source directories during recursive preview.
+- Added recursive preview regression coverage for duplicate source filenames converging on the same destination folder.
+- Existing journal, undo, traversal, Unicode-rule, and filename-safety regression coverage remains in place.
 
-### Security
-- Retained the journal-root containment checks introduced in v0.1.2.
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.3`.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
 
 ## [0.1.2] - 2026-09-03
 
-Patch release focused on journal durability and undo-path integrity.
+Patch release focused on journal durability and defense-in-depth for undo operations.
 
 ### Fixed
-- Journal replacement works on platforms where renaming onto an existing target does not overwrite it directly.
-- Undo rejects forged journal entries whose paths escape the journal's recorded root.
+- Journal snapshots can now replace an existing journal file on platforms where `rename` does not overwrite an existing destination, including Windows.
+- Core undo now validates every recorded journal path against the journal's recorded root before performing any mutation.
+
+### Security
+- A forged operation journal that references paths outside its recorded root is rejected before undo begins.
+- Existing symlink-aware path containment checks remain in place for desktop execution and undo boundaries.
 
 ### Tests
-- Added regression coverage for journal replacement and forged out-of-root journal entries.
+- Added regression coverage for replacing an existing journal snapshot.
+- Added regression coverage proving that an out-of-root undo journal cannot mutate an external file.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.2`.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
 
 ## [0.1.1] - 2026-09-03
 
-Patch release focused on Unicode-aware rule validation.
+Patch release focused on release metadata consistency and Unicode-safe rule validation.
 
 ### Fixed
-- Rule value and filename-regex length validation counts Unicode characters instead of UTF-8 bytes.
+- Rule value and filename-regex limits now count Unicode characters rather than UTF-8 bytes, so valid non-ASCII rules are not rejected prematurely.
+- Added regression coverage for 128-character and 129-character Unicode rule values.
 
-### Tests
-- Added regression coverage for Unicode rule limits.
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.1`.
+- Prepared a dedicated `release/0.1.1` maintenance line from the final `0.1.0` source commit.
+- Kept the patch release scoped to maintenance changes so the later `0.2.x` and `0.3.x` feature lines remain distinct.
+
+## [0.1.0] - 2026-08-21
+
+Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
+
+### Included in the baseline
+- Production-oriented Rust/Tauri/React SortSmith baseline.
+- Rules for extension, MIME prefix, age, size, and filename regex, including a multi-criterion rule builder and reusable presets.
+- Saved user-defined preset management: snapshot active rules, load a preset into the active rule set, edit custom preset metadata, and safely delete presets that are not assigned to watched folders.
+- Dry-run organization, collision-safe moves/renames, reversible journals, latest undo, and selectable operation-history undo.
+- Duplicate detection with BLAKE3 and no automatic deletion.
+- Watched-folder automation with user-controlled presets and intervals while the desktop app is open.
+- Native folder selection plus native settings backup/import dialogs.
+- Keyboard-first quick actions for page navigation, folder selection, preview, apply, and undo, plus an in-app shortcut reference.
+- Schema-versioned local settings, bounded JSON persistence, and privacy-safe rotating operation logs.
+- Property-based core coverage for serialization, path traversal rejection, portable filenames, and rename-template extension preservation.
+- Criterion benchmark targets for organization planning and duplicate hashing using isolated synthetic directory fixtures.
+- Responsive light/dark/system UI with accessibility baseline and About/support/funding information.
+- Full project documentation, ADRs, contribution/security/privacy policies, CI, Dependabot, CodeQL, issue/PR templates, and cross-platform release automation.
