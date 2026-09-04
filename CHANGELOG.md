@@ -8,7 +8,7 @@ Development continues on the next feature line.
 
 ## [0.1.6] - 2026-09-04
 
-Stable maintenance release focused on recursive symbolic-link traversal safety, portable Windows filename validation, collision planning robustness, and reliable undo recovery.
+Stable maintenance release focused on recursive symbolic-link traversal safety, portable Windows filename validation, collision planning robustness, reliable undo recovery, and desktop persistence behavior.
 
 ### Added
 - Added a Unix integration test through the public `sortsmith-core` API covering a recursive scan with `follow_links` enabled and an external symbolic-link directory.
@@ -26,6 +26,8 @@ Stable maintenance release focused on recursive symbolic-link traversal safety, 
 - File moves and undo moves no longer use an overwriting `rename` as their final collision boundary. They use a no-overwrite hard-link path with a `create_new` streamed-copy fallback, and retry a bounded number of collision races during execution.
 - Duplicate scans now prune symbolic-link entries whose targets resolve outside the selected root when link following is enabled.
 - The desktop watched-folder timer now prevents overlapping background scan invocations.
+- The automation editor now resynchronizes its selected preset after asynchronous state loading and enforces the backend's watched-folder limit before saving.
+- State persistence now reports success or failure to rule, preset, history, and settings-backup UI flows so failed writes are not presented as successful changes.
 
 ### Security
 - Recursive organization and duplicate scanning keep followed symbolic links inside the selected root.
