@@ -8,15 +8,18 @@ Development continues on the next feature line.
 
 ## [0.1.6] - 2026-09-04
 
-Stable maintenance release focused on strengthening the public integration-test contract for recursive symbolic-link traversal safety and keeping release metadata synchronized.
+Stable maintenance release focused on strengthening recursive symbolic-link traversal safety and portable Windows filename validation.
 
 ### Added
 - Added a Unix integration test through the public `sortsmith-core` API covering a recursive scan with `follow_links` enabled and an external symbolic-link directory.
 - The integration test verifies that an external linked directory produces no planned organization operation and that its nested external file is not counted as scanned.
 
+### Fixed
+- Filename validation now rejects Unicode superscript aliases for numbered Windows `COM` and `LPT` device names, including `COM¹` and `LPT²`.
+
 ### Quality
 - Promoted the v0.1.5 symlink traversal protection into public API-level regression coverage, reducing the chance that future refactors bypass the scanner boundary.
-- Kept the test focused on observable preview behavior rather than private implementation details.
+- Added explicit regression coverage for the Unicode Windows device-name aliases.
 
 ### Release Engineering
 - Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.6`.
@@ -119,18 +122,3 @@ Patch release focused on release metadata consistency and Unicode-safe rule vali
 ## [0.1.0] - 2026-08-21
 
 Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
-
-### Included in the baseline
-- Production-oriented Rust/Tauri/React SortSmith baseline.
-- Rules for extension, MIME prefix, age, size, and filename regex, including a multi-criterion rule builder and reusable presets.
-- Saved user-defined preset management: snapshot active rules, load a preset into the active rule set, edit custom preset metadata, and safely delete presets that are not assigned to watched folders.
-- Dry-run organization, collision-safe moves/renames, reversible journals, latest undo, and selectable operation-history undo.
-- Duplicate detection with BLAKE3 and no automatic deletion.
-- Watched-folder automation with user-controlled presets and intervals while the desktop app is open.
-- Native folder selection plus native settings backup/import dialogs.
-- Keyboard-first quick actions for page navigation, folder selection, preview, apply, and undo, plus an in-app shortcut reference.
-- Schema-versioned local settings, bounded JSON persistence, and privacy-safe rotating operation logs.
-- Property-based core coverage for serialization, path traversal rejection, portable filenames, and rename-template extension preservation.
-- Criterion benchmark targets for organization planning and duplicate hashing using isolated synthetic directory fixtures.
-- Responsive light/dark/system UI with accessibility baseline and About/support/funding information.
-- Full project documentation, ADRs, contribution/security/privacy policies, CI, Dependabot, CodeQL, issue/PR templates, and cross-platform release automation.
