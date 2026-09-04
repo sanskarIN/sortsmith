@@ -23,8 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        with: { components: rustfmt, clippy }
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy core
@@ -40,8 +39,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+        with: { components: clippy }
       - name: Install Tauri system dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Check desktop host
@@ -62,8 +60,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+        with: { node-version: 22 }
+      - name: Use repository-pinned npm
+        run: npm install --global npm@10.9.2
+      - name: Verify release metadata sync
+        run: node ../../scripts/verify-release-version.mjs
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck
