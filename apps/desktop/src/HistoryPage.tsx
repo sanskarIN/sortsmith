@@ -5,7 +5,7 @@ import { shortPath } from "./utils";
 
 interface HistoryPageProps {
   state: AppStateData;
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 export function HistoryPage({ state, persist }: HistoryPageProps) {
@@ -29,8 +29,8 @@ export function HistoryPage({ state, persist }: HistoryPageProps) {
     setBusyId(journal.id);
     try {
       const report = await backend.undo(journal.id);
-      await persist({ ...state, recentJournalIds: state.recentJournalIds.filter(id => id !== journal.id) });
-      setMessage(`Restored ${report.completed} file(s).${report.errors.length ? ` ${report.errors.length} item(s) could not be restored automatically.` : ""}`);
+      const saved = await persist({ ...state, recentJournalIds: state.recentJournalIds.filter(id => id !== journal.id) });
+      setMessage(`Restored ${report.completed} file(s).${report.errors.length ? ` ${report.errors.length} item(s) could not be restored automatically.` : ""}${saved ? "" : " The files were restored, but the recent-history state could not be saved."}`);
       await refresh();
     } catch (error) {
       setMessage(`Undo could not complete: ${String(error)}`);
