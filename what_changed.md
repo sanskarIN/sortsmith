@@ -26,6 +26,10 @@ The collision planner now also bounds generated suffix candidates to the portabl
 
 Regression coverage now verifies both Windows case-insensitive reservation and long-filename collision generation.
 
+### Journal durability hardening
+
+`crates/sortsmith-core/src/journal.rs` now synchronizes the journal directory after the temporary journal has been atomically replaced. The journal payload was already flushed and synced before replacement; syncing the containing directory adds the missing filesystem metadata durability step on Unix-like platforms. A Unix regression test exercises the new durability path.
+
 ### CI coverage for maintenance branches
 
 `.github/workflows/ci.yml` now runs on `release/**` pushes as well as `main`. This makes the maintenance release branch itself subject to the core format/clippy/tests, desktop Rust checks, and frontend typecheck/test/build gates instead of waiting until a merge or tag-triggered release workflow.
@@ -43,7 +47,7 @@ Version `0.1.6` is synchronized across the Rust workspace, desktop package, and 
 
 ## Important history note
 
-Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work includes the symlink integration regression coverage, Unicode Windows device-name validation, Windows case-insensitive reserved-destination collision handling, and portable collision-name generation. CI maintenance-branch coverage is release engineering rather than product functionality.
+Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work includes the symlink integration regression coverage, Unicode Windows device-name validation, Windows case-insensitive reserved-destination collision handling, portable collision-name generation, and journal directory durability. CI maintenance-branch coverage is release engineering rather than product functionality.
 
 ## Verification status
 
