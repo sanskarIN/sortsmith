@@ -10,15 +10,22 @@ use walkdir::{DirEntry, WalkDir};
 
 pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<DuplicateGroup>> {
     let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
+    let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
     let mut by_size: HashMap<u64, Vec<PathBuf>> = HashMap::new();
     for item in WalkDir::new(root)
         .follow_links(options.follow_links)
         .max_depth(depth)
         .into_iter()
-        .filter_entry(|entry| options.include_hidden || !is_hidden(entry, root))
+        .filter_entry(|entry| {
+            if !options.include_hidden && is_hidden(entry, root) {
+                return false;
+            }
+            options.follow_links && entry_resolves_outside_root(entry, &canonical_root) == Some(true).then_some(false).unwrap_or(true)
+        })
     {
-        let Ok(entry) = item else { continue };
+        let Ok(entry) = item else { continue; };
         if !entry.file_type().is_file() { continue; }
+        if options.follow_links && !entry_within_root(entry.path(), &canonical_root) { continue; }
         if let Ok(metadata) = entry.metadata() {
             by_size.entry(metadata.len()).or_default().push(entry.path().to_path_buf());
         }
@@ -37,6 +44,15 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
         .collect();
     groups.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| a.hash.cmp(&b.hash)));
     Ok(groups)
+}
+
+fn entry_resolves_outside_root(entry: &DirEntry, canonical_root: &Path) -> Option<bool> {
+    if !entry.file_type().is_symlink() { return Some(false); }
+    entry.path().canonicalize().ok().map(|resolved| !resolved.starts_with(canonical_root))
+}
+
+fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
+    path.canonicalize().is_ok_and(|resolved| resolved.starts_with(canonical_root))
 }
 
 fn is_hidden(entry: &DirEntry, root: &Path) -> bool {
@@ -89,5 +105,21 @@ mod tests {
         let groups = find_duplicates(dir.path(), &options).unwrap();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].files.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_symlink_directories_are_not_scanned() {
+        use std::os::unix::fs::symlink;
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let linked = root.path().join("external");
+        std::fs::write(outside.path().join("a.bin"), b"same").unwrap();
+        std::fs::write(outside.path().join("b.bin"), b"same").unwrap();
+        symlink(outside.path(), &linked).unwrap();
+
+        let options = ScanOptions { recursive: true, include_hidden: false, follow_links: true, max_depth: Some(8) };
+        let groups = find_duplicates(root.path(), &options).unwrap();
+        assert!(groups.is_empty());
     }
 }

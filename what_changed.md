@@ -1,99 +1,92 @@
 # SortSmith — Work Handoff
 
-## Current active workstream: v0.1.5 stable release
+## Current active workstream: v0.1.6 stable release
 
-- Release branch: `release/0.1.5`
-- Base: `release/0.1.4`
-- Target version: `0.1.5`
+- Release branch: `release/0.1.6`
+- Base: `release/0.1.5`
+- Target version: `0.1.6`
 - Repository: `https://github.com/sanskarIN/sortsmith`
 - Default branch: `main`
 - License: Apache-2.0
 - Commit identity requested for project work: `Sanskar <sanskarin@outlook.in>`
 
-## v0.1.5 implementation
+## v0.1.6 implementation and bug-fix audit
 
-### Version synchronization
+### Public API-level symlink traversal coverage
 
-Release metadata is synchronized to `0.1.5` in:
+The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 adds a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` that exercises `preview_organization` and verifies an external linked directory produces no planned operation and no scanned nested external file.
 
-- root `Cargo.toml` workspace package;
-- `apps/desktop/package.json`;
-- `apps/desktop/src-tauri/tauri.conf.json`.
+### Windows filename portability hardening
 
-The release tag `v0.1.5` is intended to be checked with `scripts/verify-release-version.mjs` before tagging.
+`crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
 
-### Safer symlink-directory traversal
+The collision planner treats reserved destination paths case-insensitively on Windows. This matters because Windows path comparison is case-insensitive while `HashSet<PathBuf>` equality is not. Without this normalization, two preview operations could reserve differently cased spellings of the same Windows destination and converge on one physical path.
 
-`crates/sortsmith-core/src/engine.rs` applies the selected-root boundary during WalkDir entry filtering when link following is enabled.
+The collision planner also bounds generated suffix candidates to the portable filename limits. When a source stem is already near the 255-byte or 255-UTF-16-unit boundary, a naive `name (1)` suffix would exceed the limit. v0.1.6 fits the stem to the remaining byte/unit budget before creating the candidate and trims an unsafe trailing space or period from the fitted stem.
 
-Symbolic-link entries are resolved before traversal descends into them. A symlink resolving outside the selected root is pruned before WalkDir can traverse its target directory.
+### Journal durability and path normalization
 
-This extends v0.1.4: file symlinks were already rejected before planning; v0.1.5 also prevents an external symlink directory from exposing its nested tree to recursive preview traversal.
+`crates/sortsmith-core/src/journal.rs` synchronizes the journal directory after the temporary journal has been atomically replaced. The journal payload was already flushed and synced before replacement; syncing the containing directory adds the missing filesystem metadata durability step on Unix-like platforms.
 
-### Defense in depth
+Journal snapshots normalize relative root and entry paths to absolute paths before serialization. This prevents an undo journal created through the core API with relative paths from becoming impossible to validate later because the undo preflight compares against a canonical absolute root. Regression coverage verifies that relative journal paths are normalized.
 
-The v0.1.4 file-level containment check remains in the planning loop, and execution continues to validate canonical source and destination-parent containment before filesystem mutation.
+### Crash recovery journal checkpoints
 
-### Regression coverage
+`crates/sortsmith-core/src/engine.rs` saves the journal after every successfully completed move instead of waiting until the entire batch finishes. A crash during a multi-file operation therefore leaves the journal containing all moves that were completed before the interruption.
 
-The Unix-specific v0.1.5 regression creates an external directory containing a matching nested file, links to it from inside the selected root, enables recursive link following, and verifies that the external tree is not traversed or counted as scanned and no organization operation is planned.
+The execution report also records absolute source and destination paths, keeping the in-memory report consistent with the durable journal format.
 
-The maintenance line also retains the v0.1.1-v0.1.4 coverage for Unicode rule limits, journal replacement, journal-root containment, traversal rejection, portable filename validation, collision reservation, and external file-symlink preview rejection.
+### No-overwrite move safety
 
-## Stable-release documentation finalized
+File moves no longer rely on `fs::rename` as the final collision boundary. On supported filesystems SortSmith first creates a hard link at the destination and then removes the source; when hard linking is unavailable or crosses filesystems it falls back to `create_new` plus streamed copy and source removal. Both approaches refuse an already-created destination instead of overwriting it.
 
-- `CHANGELOG.md` now identifies v0.1.5 as a stable maintenance patch dated 2026-09-04.
-- `RELEASE_NOTES_v0.1.5.md` is finalized for a stable release rather than a pre-release.
-- `docs/release-v0.1.5-checklist.md` now contains the stable release gate and post-publication verification.
-- This `what_changed.md` records the stable-release continuation.
+If a destination appears after preview but before execution, the engine now selects another collision-safe destination and retries up to eight times, reporting an explicit error if those retries are exhausted. Undo uses the same no-overwrite primitive, so a newly occupied original path cannot be silently replaced.
 
-## v0.1.5 commits
+Regression coverage creates a destination after preview and verifies the newly-created file is preserved while the source is moved to a collision-safe suffix.
 
-The v0.1.5 branch contains the following meaningful work commits:
+### Duplicate-scan root containment
 
-1. `c8b09fee3d394b4d8224cec09f0189198a920145` — `fix(core): prune external symlink directories during preview`
-2. `347741aca0fe61e7327c1f41d1d9022190951ad5` — `release: bump workspace version to 0.1.5`
-3. `60bf7902c4e378b16cd28a415cf4ead0cbbd72da` — `release(frontend): bump desktop version to 0.1.5`
-4. `4462ad6c3182154432b573c3a2b412eb6754444c` — `release(tauri): bump application version to 0.1.5`
-5. `e57ad3c0db594faa88fb527b9b5e5b3b54045bc5` — `docs(changelog): prepare v0.1.5 symlink traversal patch`
-6. `daa21b041ef25cf43072b56426c1c1cf0795696e` — `docs(release): add v0.1.5 release notes`
-7. `cda55c4db6419ee37f32737d48e7f390d8b07308` — `docs(release): add v0.1.5 publication checklist`
-8. `67e3d8ba3f8d623bbd15400d46994bd14195e58d` — `docs(release): finalize v0.1.5 stable release notes`
-9. `f5a962fc5e06e6f726284568d54ea07f296bf9d2` — `docs(release): finalize v0.1.5 stable release checklist`
-10. `967dbfc813f48e5077e43c105fc56e964bd2c719` — `docs(changelog): finalize v0.1.5 stable release entry`
+`crates/sortsmith-core/src/duplicates.rs` now applies the same external-symlink containment checks used by organization preview when duplicate scanning is configured to follow links. This prevents a linked directory outside the selected root from being traversed and hashed. A Unix regression test covers the external-directory case.
 
-No empty commits were added merely to inflate history.
+### Desktop background-watch and persistence reliability
 
-## Historical v0.1.x context
+`apps/desktop/src/App.tsx` now guards the one-minute watched-folder timer against overlapping background invocations. A slow scan cannot be started again by the next timer tick while the previous background run is still active.
 
-The `0.1.x` maintenance line is intentionally separate from the later feature line. `release/0.1.1` originated from the recovered final `0.1.0` source boundary immediately before the later `0.2.0` version bump.
+`apps/desktop/src/AutomationPage.tsx` now re-synchronizes its selected preset after saved state finishes loading or a preset is removed. It also mirrors the backend's 100-watched-folder limit in the UI.
 
-The existing `v0.1.0` tag points at newer repository history and must not be rewritten casually. Maintenance branches preserve the historical source lineage without merging backward into modern `main`.
+`apps/desktop/src/App.tsx` now returns a success/failure result from state persistence instead of swallowing the result. Rule and preset editors, history, and settings backup import use that result so a failed write is not presented as a successful change.
 
-Maintenance progression:
+### Release-branch CI coverage
 
-- v0.1.1: Unicode-character-based rule-value and filename-regex limits.
-- v0.1.2: safer existing-journal replacement and core undo-path containment.
-- v0.1.3: preview-wide destination reservation for collision-safe planning.
-- v0.1.4: preview-time rejection of files resolved outside the selected root when link following is enabled.
-- v0.1.5: traversal-time pruning of external symlink directories before recursive descent.
+`.github/workflows/ci.yml` runs on `release/**` pushes as well as `main`. This makes the maintenance release branch itself subject to the core format/clippy/tests, desktop Rust checks, and frontend typecheck/test/build gates.
 
-## Release automation
+### Maintenance diff cleanup
 
-The release workflow is tag driven. It triggers for `v*` tags, verifies release metadata, builds on its configured Linux, Windows, and macOS runners, and uses the Tauri action to prepare a draft GitHub release.
+The earlier `rules.rs` formatting-only refactor was reverted to the release/0.1.5 formatting baseline. This removes unrelated churn from the release diff and leaves the v0.1.6 branch focused on actual safety, durability, traversal, and release-engineering changes.
 
-The workflow currently installs frontend dependencies with `npm install`. `npm ci` should only replace this after a real npm lockfile has been generated and committed from a trusted networked environment.
+### Release metadata
+
+Version `0.1.6` remains synchronized across the Rust workspace, desktop package, and Tauri application configuration.
+
+## v0.1.6 documentation
+
+- `CHANGELOG.md` records the stable v0.1.6 maintenance release and collision portability work.
+- `RELEASE_NOTES_v0.1.6.md` contains the stable release body.
+- `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
+- This handoff records the actual implementation and bug-fix audit work.
 
 ## Verification status
 
-The repository-side stable release preparation is complete. However, this connected environment does not have the project checkout/toolchains required to truthfully report local Rust, Node.js, Tauri, installer, or cross-platform validation as passed.
+The repository has been reviewed and additional source-level defects were fixed directly on `release/0.1.6`. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this environment cannot provide a truthful local project checkout/toolchain execution.
 
-A direct network clone attempt was unavailable because the execution environment could not resolve `github.com`; therefore no local build/test result is being fabricated.
+The CI workflow is configured to run for `release/**` pushes. The available GitHub connector does not expose a complete check-run listing for arbitrary push workflow executions, so no CI result is fabricated here.
 
-Before calling the stable release fully verified, run:
+Before publication, run the full validation suite from the release branch:
 
 ```bash
-node scripts/verify-release-version.mjs v0.1.5
+git checkout release/0.1.6
+git pull origin release/0.1.6
+node scripts/verify-release-version.mjs v0.1.6
 cargo fmt --all -- --check
 cargo check --workspace
 cargo test --workspace
@@ -109,43 +102,37 @@ npm run build
 npm run tauri build
 ```
 
-Then review Linux, Windows, and macOS artifacts and perform clean-machine installation/launch smoke tests where available.
+The Unix symlink regressions and Windows-specific collision test should execute on their respective platforms as part of the workspace test suite.
 
-## Stable GitHub release procedure
+## Stable release procedure
 
-After every applicable validation gate passes:
+After validation passes:
 
 ```bash
-git checkout release/0.1.5
-git pull origin release/0.1.5
-node scripts/verify-release-version.mjs v0.1.5
+git checkout release/0.1.6
+git pull origin release/0.1.6
+node scripts/verify-release-version.mjs v0.1.6
 git diff --check
 git status --short
-git tag -a v0.1.5 -m "SortSmith v0.1.5"
-git push origin v0.1.5
+git tag -a v0.1.6 -m "SortSmith v0.1.6"
+git push origin v0.1.6
 ```
 
-The tag should trigger `.github/workflows/release.yml`. Review all generated artifacts and the draft release before publishing.
+Then review the tag-triggered release workflow, generated Linux/Windows/macOS artifacts, and draft GitHub release before publishing.
 
-Recommended GitHub release settings:
+Recommended release metadata:
 
-- Tag: `v0.1.5`
-- Target: `release/0.1.5`
-- Title: `SortSmith v0.1.5 — Patch Release`
+- Tag: `v0.1.6`
+- Target: `release/0.1.6`
+- Title: `SortSmith v0.1.6 — Patch Release`
 - Pre-release: disabled
-- Latest release: disabled
-- Body: `RELEASE_NOTES_v0.1.5.md`
+- Latest: disabled
+- Body: `RELEASE_NOTES_v0.1.6.md`
 
-Because modern `main` is already on a later `0.3.x` feature line, v0.1.5 should remain a maintenance release and should not be selected as the repository's latest release.
+The available GitHub integration can modify repository files and branches but does not expose tag creation or GitHub release publication. Therefore the final tag push and publication remain an owner-side step after validation.
 
-## Release-publication limitation
+Do not claim v0.1.6 is published until the tag and GitHub release can be independently verified.
 
-The available GitHub integration can update repository files and branches and inspect GitHub state, but it does not expose a tag-creation or release-publication action. Consequently, the final tag push and GitHub release publication must be performed by the repository owner after local validation.
+## Maintenance-line boundary
 
-Do not claim v0.1.5 has been published until the tag and published GitHub release can be verified.
-
-## After v0.1.5
-
-Do not merge the `0.1.x` maintenance branch into modern `main` merely to advance the patch version. Once v0.1.5 is verified and published, return to the modern feature-development line for the next milestone.
-
-The next feature release should be planned from the current `main`/development state rather than backporting unrelated `0.2.x` or `0.3.x` functionality into `0.1.x`.
+Keep the 0.1.x maintenance branch separate from modern `main`, which is already on a later feature-development line. Do not merge the maintenance branch into modern main merely to advance the patch version.

@@ -8,7 +8,7 @@ type CriterionDraft = { id: string; kind: CriterionKind; primary: string; second
 
 interface RulesPageProps {
   state: AppStateData;
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 const criterionLabels: Record<CriterionKind, string> = {
@@ -106,7 +106,7 @@ export function RulesPage({ state, persist }: RulesPageProps) {
         action: compileAction(),
       };
       const customBase = state.rules.length ? state.rules : presetRules;
-      await persist({ ...state, rules: [...customBase, rule] });
+      if (!await persist({ ...state, rules: [...customBase, rule] })) return;
       setName("");
       setMatchAll(true);
       setCriteria([freshCriterion()]);

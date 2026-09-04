@@ -7,7 +7,8 @@ use crate::{Result, SortSmithError};
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Component, Path};
+use std::io::Write;
+use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
@@ -69,30 +70,95 @@ fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
 
 pub fn execute_preview(root: &Path, preview: &PreviewResult, journal_dir: &Path) -> Result<ExecutionReport> {
     validate_preview_paths(root, preview)?;
-    let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: root.to_path_buf(), entries: Vec::new() };
+    let canonical_root = root.canonicalize().map_err(|e| io(root, e))?;
+    let mut journal = OperationJournal { id: Uuid::new_v4(), created_at: Utc::now(), root: canonical_root, entries: Vec::new() };
     save_journal(journal_dir, &journal)?;
     let mut errors = Vec::new();
     for op in &preview.operations {
-        let destination = collision_safe_path(&op.destination);
+        let mut destination = collision_safe_path(&op.destination);
         if let Some(parent) = destination.parent() {
             if let Err(err) = fs::create_dir_all(parent) {
                 errors.push(format!("Could not create destination folder: {err}"));
                 continue;
             }
         }
-        match fs::rename(&op.source, &destination) {
-            Ok(()) => journal.entries.push(JournalEntry { operation_id: op.id, from: op.source.clone(), to: destination }),
-            Err(rename_error) if rename_error.kind() == std::io::ErrorKind::CrossesDevices => {
-                match copy_then_remove(&op.source, &destination) {
-                    Ok(()) => journal.entries.push(JournalEntry { operation_id: op.id, from: op.source.clone(), to: destination }),
-                    Err(err) => errors.push(format!("Could not move a file across devices: {err}")),
+        let mut moved = false;
+        let mut move_error = false;
+        for _ in 0..8 {
+            match move_without_overwrite(&op.source, &destination) {
+                Ok(()) => { moved = true; break; }
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                    destination = collision_safe_path(&destination);
+                    if let Some(parent) = destination.parent() {
+                        if let Err(parent_error) = fs::create_dir_all(parent) {
+                            errors.push(format!("Could not create destination folder: {parent_error}"));
+                            move_error = true;
+                            break;
+                        }
+                    }
+                }
+                Err(err) => {
+                    errors.push(format!("Could not move a file: {err}"));
+                    move_error = true;
+                    break;
                 }
             }
-            Err(err) => errors.push(format!("Could not move a file: {err}")),
+        }
+        if !moved && !move_error {
+            errors.push("Could not find a collision-free destination after several retries.".into());
+        }
+        if moved {
+            journal.entries.push(JournalEntry {
+                operation_id: op.id,
+                from: absolute_path(&op.source)?,
+                to: absolute_path(&destination)?,
+            });
+            if let Err(err) = save_journal(journal_dir, &journal) {
+                errors.push(format!("A completed move could not be durably recorded in the undo journal: {err}"));
+                break;
+            }
         }
     }
-    save_journal(journal_dir, &journal)?;
     Ok(ExecutionReport { completed: journal.entries.len(), journal, errors })
+}
+
+fn absolute_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    std::env::current_dir().map(|dir| dir.join(path)).map_err(|e| io(path, e))
+}
+
+fn move_without_overwrite(source: &Path, destination: &Path) -> std::io::Result<()> {
+    match fs::hard_link(source, destination) {
+        Ok(()) => remove_source_after_link(source, destination),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(error),
+        Err(_) => copy_new_then_remove(source, destination),
+    }
+}
+
+fn remove_source_after_link(source: &Path, destination: &Path) -> std::io::Result<()> {
+    if let Err(error) = fs::remove_file(source) {
+        let _ = fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn copy_new_then_remove(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut output = fs::OpenOptions::new().write(true).create_new(true).open(destination)?;
+    let result = (|| {
+        let mut input = fs::File::open(source)?;
+        std::io::copy(&mut input, &mut output)?;
+        output.flush()?;
+        output.sync_all()?;
+        fs::remove_file(source)
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_file(destination);
+        return Err(error);
+    }
+    Ok(())
 }
 
 pub fn undo_journal(journal_path: &Path) -> Result<ExecutionReport> {
@@ -104,9 +170,8 @@ pub fn undo_journal(journal_path: &Path) -> Result<ExecutionReport> {
         if !entry.to.exists() { errors.push("A moved file is missing; skipped during undo.".into()); continue; }
         if entry.from.exists() { errors.push("Original path is occupied; skipped during undo.".into()); continue; }
         if let Some(parent) = entry.from.parent() { let _ = fs::create_dir_all(parent); }
-        match fs::rename(&entry.to, &entry.from) {
+        match move_without_overwrite(&entry.to, &entry.from) {
             Ok(()) => completed += 1,
-            Err(err) if err.kind() == std::io::ErrorKind::CrossesDevices => match copy_then_remove(&entry.to, &entry.from) { Ok(()) => completed += 1, Err(e) => errors.push(format!("Undo failed across devices: {e}")) },
             Err(err) => errors.push(format!("Undo failed: {err}")),
         }
     }
@@ -196,15 +261,6 @@ fn redact_walk_error(error: &walkdir::Error) -> String {
     }
 }
 
-fn copy_then_remove(source: &Path, destination: &Path) -> std::io::Result<()> {
-    fs::copy(source, destination)?;
-    if let Err(err) = fs::remove_file(source) {
-        let _ = fs::remove_file(destination);
-        return Err(err);
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +284,48 @@ mod tests {
         let undo = undo_journal(&journal_path).unwrap();
         assert_eq!(undo.completed, 1);
         assert!(root.path().join("note.txt").exists());
+    }
+
+    #[test]
+    fn post_preview_destination_collision_is_never_overwritten() {
+        let root = tempdir().unwrap();
+        let journals = tempdir().unwrap();
+        let source = root.path().join("note.txt");
+        let destination = root.path().join("Text").join("note.txt");
+        std::fs::write(&source, b"source").unwrap();
+        let preview = preview_organization(root.path(), &[txt_rule()], &ScanOptions::default()).unwrap();
+        assert_eq!(preview.operations.len(), 1);
+
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::write(&destination, b"newer").unwrap();
+        let report = execute_preview(root.path(), &preview, journals.path()).unwrap();
+
+        assert_eq!(report.completed, 1);
+        assert_eq!(std::fs::read(&destination).unwrap(), b"newer");
+        assert_eq!(std::fs::read(root.path().join("Text").join("note (1).txt")).unwrap(), b"source");
+    }
+
+    #[test]
+    fn relative_root_execution_produces_an_undoable_absolute_journal() {
+        let current = std::env::current_dir().unwrap();
+        let relative_name = format!(".sortsmith-relative-root-{}", Uuid::new_v4());
+        let relative_root = PathBuf::from(&relative_name);
+        let root = current.join(&relative_root);
+        let journals = current.join(format!(".sortsmith-relative-journals-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("note.txt"), b"hello").unwrap();
+
+        let preview = preview_organization(&relative_root, &[txt_rule()], &ScanOptions::default()).unwrap();
+        let report = execute_preview(&relative_root, &preview, &journals).unwrap();
+        assert!(report.journal.root.is_absolute());
+        assert!(report.journal.entries[0].from.is_absolute());
+        assert!(report.journal.entries[0].to.is_absolute());
+        let journal_path = journals.join(format!("{}.journal.json", report.journal.id));
+        assert_eq!(undo_journal(&journal_path).unwrap().completed, 1);
+        assert!(root.join("note.txt").exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_dir_all(&journals).unwrap();
     }
 
     #[test]

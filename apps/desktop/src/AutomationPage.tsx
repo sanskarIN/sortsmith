@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { chooseFolder } from "./dialogs";
 import type { AppStateData, WatchedFolder } from "./types";
 
 interface AutomationPageProps {
   state: AppStateData;
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 export function AutomationPage({ state, persist }: AutomationPageProps) {
@@ -12,6 +12,16 @@ export function AutomationPage({ state, persist }: AutomationPageProps) {
   const [interval, setIntervalValue] = useState(60);
   const [presetId, setPresetId] = useState(state.presets[0]?.id ?? "");
   const [message, setMessage] = useState("Automation runs only while SortSmith is open and every run remains reversible.");
+
+  useEffect(() => {
+    if (!state.presets.length) {
+      setPresetId("");
+      return;
+    }
+    if (!state.presets.some(preset => preset.id === presetId)) {
+      setPresetId(state.presets[0].id);
+    }
+  }, [presetId, state.presets]);
 
   async function choose() {
     try {
@@ -27,6 +37,7 @@ export function AutomationPage({ state, persist }: AutomationPageProps) {
     if (!normalizedPath) { setMessage("Choose a folder before adding a watch."); return; }
     const safeInterval = normalizeInterval(interval);
     if (!presetId) { setMessage("Choose a preset for the watched folder."); return; }
+    if (state.watchedFolders.length >= 100) { setMessage("This build supports up to 100 watched folders."); return; }
     const watch: WatchedFolder = {
       id: crypto.randomUUID(),
       path: normalizedPath,
@@ -35,7 +46,7 @@ export function AutomationPage({ state, persist }: AutomationPageProps) {
       enabled: true,
       lastRunAt: null,
     };
-    await persist({ ...state, watchedFolders: [...state.watchedFolders, watch] });
+    if (!await persist({ ...state, watchedFolders: [...state.watchedFolders, watch] })) return;
     setPath("");
     setIntervalValue(60);
     setMessage("Watched folder added. It will run when its interval becomes due while SortSmith is open.");
