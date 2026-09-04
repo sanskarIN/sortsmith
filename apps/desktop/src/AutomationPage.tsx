@@ -4,7 +4,7 @@ import type { AppStateData, WatchedFolder } from "./types";
 
 interface AutomationPageProps {
   state: AppStateData;
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 export function AutomationPage({ state, persist }: AutomationPageProps) {
@@ -46,7 +46,7 @@ export function AutomationPage({ state, persist }: AutomationPageProps) {
       enabled: true,
       lastRunAt: null,
     };
-    await persist({ ...state, watchedFolders: [...state.watchedFolders, watch] });
+    if (!await persist({ ...state, watchedFolders: [...state.watchedFolders, watch] })) return;
     setPath("");
     setIntervalValue(60);
     setMessage("Watched folder added. It will run when its interval becomes due while SortSmith is open.");
