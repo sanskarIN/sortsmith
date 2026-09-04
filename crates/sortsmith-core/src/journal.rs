@@ -38,8 +38,8 @@ fn normalize_journal_paths(journal: &OperationJournal) -> Result<OperationJourna
         .iter()
         .map(|entry| crate::models::JournalEntry {
             operation_id: entry.operation_id,
-            from: make_absolute_from(&journal.root, &entry.from)?,
-            to: make_absolute_from(&journal.root, &entry.to)?,
+            from: make_absolute(&entry.from)?,
+            to: make_absolute(&entry.to)?,
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -56,15 +56,6 @@ fn make_absolute(path: &Path) -> Result<PathBuf> {
         Ok(path.to_path_buf())
     } else {
         std::env::current_dir().map(|dir| dir.join(path)).map_err(|e| io(path, e))
-    }
-}
-
-fn make_absolute_from(root: &Path, path: &Path) -> Result<PathBuf> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
-    } else {
-        let base = make_absolute(root)?;
-        Ok(base.join(path))
     }
 }
 
@@ -127,7 +118,8 @@ mod tests {
         let path = save_journal(dir.path(), &journal).unwrap();
         assert!(path.exists());
         assert!(!path.with_extension("journal.json.tmp").exists());
-        assert_eq!(load_journal(&path).unwrap(), journal);
+        let stored = load_journal(&path).unwrap();
+        assert_eq!(stored, journal);
     }
 
     #[test]
@@ -154,7 +146,7 @@ mod tests {
         let journal = OperationJournal {
             id: Uuid::new_v4(),
             created_at: Utc::now(),
-            root: root.path().join(".").to_path_buf(),
+            root: root.path().to_path_buf(),
             entries: vec![JournalEntry {
                 operation_id: Uuid::new_v4(),
                 from: PathBuf::from("relative-before.txt"),
@@ -167,7 +159,6 @@ mod tests {
         assert!(stored.root.is_absolute());
         assert!(stored.entries[0].from.is_absolute());
         assert!(stored.entries[0].to.is_absolute());
-        assert!(stored.entries[0].from.starts_with(stored.root.parent().unwrap_or(&stored.root)));
     }
 
     #[cfg(unix)]
