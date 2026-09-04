@@ -8,16 +8,16 @@ Development continues on the next feature line.
 
 ## [0.1.5] - 2026-09-04
 
-Pre-release patch focused on preventing recursive traversal from escaping the selected folder through symbolic-link directories.
+Stable maintenance patch focused on preventing recursive traversal from escaping the selected folder through symbolic-link directories.
 
 ### Fixed
 - Preview traversal now prunes symbolic-link entries whose resolved targets are outside the selected root before WalkDir descends into them.
-- External symlink directories are therefore rejected at the traversal boundary rather than allowing an external tree to be visited and filtered file-by-file afterward.
+- External symlink directories are rejected at the traversal boundary instead of allowing an external tree to be visited and filtered file-by-file afterward.
 - Existing file-level external-symlink rejection remains in place as defense-in-depth.
 
 ### Security
 - Recursive scans with `follow_links` enabled now apply the selected-root boundary before descending through a symbolic-link directory.
-- This reduces both unintended external traversal and the amount of external filesystem metadata that SortSmith needs to inspect.
+- This reduces unintended external traversal and the amount of external filesystem metadata that SortSmith needs to inspect.
 
 ### Tests
 - Added Unix regression coverage for a symlinked directory that points outside the selected root and contains a nested matching file.
@@ -25,6 +25,7 @@ Pre-release patch focused on preventing recursive traversal from escaping the se
 
 ### Release Engineering
 - Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.5`.
+- Finalized the stable v0.1.5 release notes and publication checklist.
 - Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
 
 ## [0.1.4] - 2026-09-03
@@ -83,7 +84,7 @@ Patch release focused on journal durability and defense-in-depth for undo operat
 
 ### Release Engineering
 - Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.2`.
-- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later `0.2.x` feature-development line.
+- Continued the dedicated `release/0.1.x` maintenance line without merging it into the later feature-development line.
 
 ## [0.1.1] - 2026-09-03
 
