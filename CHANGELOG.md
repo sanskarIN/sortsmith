@@ -6,6 +6,29 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development continues on the next feature line.
 
+## [0.1.7] - 2026-09-04
+
+Stable maintenance release focused on keeping cached preview planning aligned with the filesystem safety guarantees of the primary preview engine.
+
+### Fixed
+- Cached organization previews now prune symbolic-link files and directories whose resolved targets are outside the selected root when `follow_links` is enabled.
+- Cached previews now apply a selected-root containment check before reusing cached metadata or planning an operation for a followed symbolic link.
+- Cached preview planning now reserves destinations already assigned earlier in the same preview, preventing duplicate source filenames from converging on one physical destination.
+
+### Security
+- The performance-oriented cached preview path now enforces the same external-symlink traversal boundary as the primary preview path.
+- Preview-time collision reservation remains deterministic and collision-safe even when file descriptions are reused from the in-memory cache.
+
+### Tests
+- Added a Unix regression covering an external symbolic-link directory with a nested matching file while cached preview uses `follow_links`.
+- Added cached-preview regression coverage for duplicate source filenames targeting the same destination folder.
+- Preserved coverage for cache hits, changed-file rescans, deleted-file pruning, rule-scope resets, time-sensitive rules, and collision recomputation.
+
+### Release Engineering
+- Synchronized the Rust workspace, desktop package, and Tauri application versions at `0.1.7`.
+- Prepared the dedicated `release/0.1.7` maintenance branch from `release/0.1.6`.
+- Added stable v0.1.7 release notes and publication checklist.
+
 ## [0.1.6] - 2026-09-04
 
 Stable maintenance release focused on recursive symbolic-link traversal safety, portable Windows filename validation, collision planning robustness, reliable undo recovery, and desktop persistence behavior.
