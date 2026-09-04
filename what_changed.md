@@ -14,42 +14,26 @@
 
 ### Version synchronization
 
-Release metadata is synchronized to `0.1.6` in:
-
-- root `Cargo.toml` workspace package;
-- `apps/desktop/package.json`;
-- `apps/desktop/src-tauri/tauri.conf.json`.
-
-The release tag `v0.1.6` is intended to be checked with `scripts/verify-release-version.mjs` before tagging.
+Release metadata is synchronized to `0.1.6` in the Rust workspace, desktop package, and Tauri application configuration.
 
 ### Public API-level symlink traversal coverage
 
-The v0.1.5 implementation already prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 strengthens the maintenance contract by adding a public integration test at:
+The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 adds a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` that exercises `preview_organization` and verifies an external linked directory produces no planned operation and no scanned nested external file.
 
-`crates/sortsmith-core/tests/external_symlink_traversal.rs`
+### Windows filename portability hardening
 
-The test uses the exported `preview_organization` API rather than private helper functions. It creates an external directory containing a nested matching file, creates a symbolic link to that external directory from inside the selected root, enables recursive link following, and verifies that:
+`crates/sortsmith-core/src/safety.rs` now rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`. Regression coverage verifies these aliases are rejected while `COM0` remains valid.
 
-- no organization operation is planned;
-- the nested external file is not counted as scanned;
-- the external file remains present and untouched.
+This closes a cross-platform filename-validation edge case without changing valid ordinary filenames.
 
-The regression is Unix-specific because the test directly exercises the Unix symbolic-link API.
+## v0.1.6 documentation
 
-### Why this is a separate patch release
-
-v0.1.6 is intentionally a maintenance/quality patch rather than a feature release. Its purpose is to make the security behavior introduced in v0.1.5 an observable public API contract that future refactors must preserve.
-
-No unrelated `0.2.x` or `0.3.x` features are backported into this maintenance line.
-
-## v0.1.6 documentation finalized
-
-- `CHANGELOG.md` now identifies v0.1.6 as a stable maintenance release dated 2026-09-04.
+- `CHANGELOG.md` records the stable v0.1.6 maintenance release.
 - `RELEASE_NOTES_v0.1.6.md` contains the stable release body.
-- `docs/release-v0.1.6-checklist.md` contains repository, validation, tagging, artifact, and publication gates.
-- This `what_changed.md` records the v0.1.6 continuation and release state.
+- `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
+- This handoff records the actual implementation and documentation work.
 
-## v0.1.6 commits created in this continuation
+## Commits created in this continuation
 
 1. `3d0e2f0a81c3da2713c26c96dd14fa5539e78323` — `release: bump workspace version to 0.1.6`
 2. `2be3b2697d8857e10d3a5c7c0e7c384732e775b6` — `release(frontend): bump desktop version to 0.1.6`
@@ -58,38 +42,19 @@ No unrelated `0.2.x` or `0.3.x` features are backported into this maintenance li
 5. `a50d4009fb917e757419882b858fb29a61ad7dcd` — `docs(changelog): prepare v0.1.6 integration safety maintenance release`
 6. `41943976645f080f1a1e5b835a8aa19e03e2587b` — `docs(release): add v0.1.6 stable release notes`
 7. `185f0c0d0861c1cb99f428782ace80ab7b509b6e` — `docs(release): add v0.1.6 stable release checklist`
-8. This handoff update records the final v0.1.6 continuation state.
+8. `b8eda6f46312bbb9062170633890efefe53d3169` — `test(core): cover Windows UTF-16 filename boundary`
+9. `81b8731db92b8c30a1b5a202b6070742a1f0150a` — `refactor(core): normalize rule validation test fixture formatting`
+10. `e8c1962711d7769d9b6c09f5c2688ee3cc0705e8` — `fix(core): reject Unicode Windows device-name aliases`
+11. `de324a0eb86179b30b3f236ece34d8741a9bfe36` — `docs(release): refine v0.1.6 release notes with portability fix`
+12. `a476b2bf0b28741417458e800f9f500aaffd7f92` — `docs(changelog): record v0.1.6 portability hardening`
 
-No empty commits were added merely to inflate history.
-
-## Historical v0.1.x context
-
-The `0.1.x` maintenance line is intentionally separate from the later feature line. `release/0.1.1` originated from the recovered final `0.1.0` source boundary immediately before the later `0.2.0` version bump.
-
-The existing `v0.1.0` tag points at newer repository history and must not be rewritten casually. Maintenance branches preserve the historical source lineage without merging backward into modern `main`.
-
-Maintenance progression:
-
-- v0.1.1: Unicode-character-based rule-value and filename-regex limits.
-- v0.1.2: safer existing-journal replacement and core undo-path containment.
-- v0.1.3: preview-wide destination reservation for collision-safe planning.
-- v0.1.4: preview-time rejection of files resolved outside the selected root when link following is enabled.
-- v0.1.5: traversal-time pruning of external symlink directories before recursive descent.
-- v0.1.6: public API-level regression coverage for the v0.1.5 symlink traversal boundary.
-
-## Release automation
-
-The release workflow is tag driven. It triggers for `v*` tags, verifies release metadata, builds on its configured Linux, Windows, and macOS runners, and uses the Tauri action to prepare a draft GitHub release.
-
-The workflow currently installs frontend dependencies with `npm install`. `npm ci` should only replace this after a real npm lockfile has been generated and committed from a trusted networked environment.
+The branch now contains 20 commits ahead of `release/0.1.5` including the earlier v0.1.6 preparation commits and this continuation. No empty commits were intentionally created merely to inflate history.
 
 ## Verification status
 
-Repository-side v0.1.6 release preparation is complete through branch creation, implementation/test coverage, version synchronization, changelog, release notes, checklist, and handoff documentation.
+Repository-side implementation and release documentation are prepared. Local Rust, Node.js, Tauri, installer, and cross-platform builds have not been claimed as passed because this connected environment does not provide the project checkout/toolchains needed to execute them truthfully.
 
-Local Rust, Node.js, Tauri, installer, and cross-platform validation has not been claimed as passed because this connected environment does not provide the project checkout/toolchains required to execute those commands truthfully.
-
-Before calling v0.1.6 fully verified, run:
+Run the following before publication:
 
 ```bash
 git checkout release/0.1.6
@@ -110,13 +75,11 @@ npm run build
 npm run tauri build
 ```
 
-The Unix public regression should be included automatically by `cargo test --workspace` on Unix-capable runners.
+The Unix public symlink regression and filename portability tests should execute as part of the workspace test suite on Unix-capable runners.
 
-Then review Linux, Windows, and macOS artifacts and perform clean-machine installation/launch smoke tests where available.
+## Stable release procedure
 
-## Stable GitHub release procedure
-
-After every applicable validation gate passes:
+After validation passes:
 
 ```bash
 git checkout release/0.1.6
@@ -128,27 +91,21 @@ git tag -a v0.1.6 -m "SortSmith v0.1.6"
 git push origin v0.1.6
 ```
 
-The tag should trigger `.github/workflows/release.yml`. Review all generated artifacts and the draft release before publishing.
+Then review the tag-triggered release workflow, generated Linux/Windows/macOS artifacts, and draft GitHub release before publishing.
 
-Recommended GitHub release settings:
+Recommended release metadata:
 
 - Tag: `v0.1.6`
 - Target: `release/0.1.6`
 - Title: `SortSmith v0.1.6 — Patch Release`
 - Pre-release: disabled
-- Latest release: disabled
+- Latest: disabled
 - Body: `RELEASE_NOTES_v0.1.6.md`
 
-Because modern `main` is already on a later `0.3.x` feature line, v0.1.6 should remain a maintenance release and should not be selected as the repository's latest release.
+The available GitHub integration can modify repository files and branches but does not expose tag creation or GitHub release publication. Therefore the final tag push and publication remain an owner-side step after validation.
 
-## Release-publication limitation
+Do not claim v0.1.6 is published until the tag and GitHub release can be independently verified.
 
-The available GitHub integration can create branches and update repository files and can inspect repository state, but it does not expose a tag-creation or GitHub release-publication action. Consequently, the final tag push and GitHub release publication must be performed by the repository owner after local validation.
+## Maintenance-line boundary
 
-Do not claim v0.1.6 has been published until the tag and published GitHub release can be independently verified.
-
-## After v0.1.6
-
-Do not merge the `0.1.x` maintenance branch into modern `main` merely to advance the patch version. Once v0.1.6 is verified and published, return to the modern feature-development line for the next milestone.
-
-The next feature release should be planned from the current `main`/development state rather than backporting unrelated `0.2.x` or `0.3.x` functionality into `0.1.x`.
+Keep the 0.1.x maintenance branch separate from modern `main`, which is already on a later feature-development line. Do not merge the maintenance branch into modern main merely to advance the patch version.
