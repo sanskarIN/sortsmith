@@ -66,20 +66,30 @@ function App() {
   }, [state.settings]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => { backend.runDueWatches().catch(() => undefined); }, 60_000);
+    let running = false;
+    const run = async () => {
+      if (running) return;
+      running = true;
+      try {
+        await backend.runDueWatches();
+      } catch {
+        // A failed background watch is reported on its next explicit run.
+      } finally {
+        running = false;
+      }
+    };
+    const timer = window.setInterval(() => { void run(); }, 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  async function persist(next: AppStateData) {
-    const normalized = upgradeBundledPresets(next);
+  async function persist(next: AppStateData): Promise<boolean> {
     try {
-      await backend.saveState(normalized.state);
-      setState(normalized.state);
-      if (normalized.missingPresetCount > 0) {
-        setMessage(`${normalized.missingPresetCount} bundled preset pack(s) could not be added because the saved preset limit is already full.`);
-      }
+      await backend.saveState(next);
+      setState(next);
+      return true;
     } catch (error) {
       setMessage(`The change could not be saved, so the previous settings remain active. ${String(error)}`);
+      return false;
     }
   }
 
@@ -113,8 +123,9 @@ function App() {
     try {
       const report = await backend.execute(rootPath.trim(), preview);
       const next = { ...state, recentJournalIds: [report.journal.id, ...state.recentJournalIds].slice(0, 20) };
-      await persist(next); setPreview(null);
-      setMessage(`Completed ${report.completed} changes. ${report.errors.length ? `${report.errors.length} item(s) need attention.` : "Undo is available."}`);
+      const saved = await persist(next);
+      setPreview(null);
+      setMessage(`Completed ${report.completed} changes. ${report.errors.length ? `${report.errors.length} item(s) need attention.` : saved ? "Undo is available." : "Undo journal is available, but recent-history state could not be saved."}`);
     } catch (error) { setMessage(`Apply failed safely: ${String(error)}`); }
     finally { setBusy(false); }
   }
@@ -125,8 +136,8 @@ function App() {
     setBusy(true);
     try {
       const report = await backend.undo(journalId);
-      await persist({ ...state, recentJournalIds: state.recentJournalIds.slice(1) });
-      setMessage(`Restored ${report.completed} file(s). ${report.errors.length ? `${report.errors.length} item(s) could not be restored automatically.` : ""}`);
+      const saved = await persist({ ...state, recentJournalIds: state.recentJournalIds.slice(1) });
+      setMessage(`Restored ${report.completed} file(s). ${report.errors.length ? `${report.errors.length} item(s) could not be restored automatically.` : saved ? "" : "The local history state could not be updated."}`);
     } catch (error) { setMessage(`Undo could not complete: ${String(error)}`); }
     finally { setBusy(false); }
   }
@@ -185,7 +196,7 @@ function Organize({rootPath,setRootPath,preview,busy,onChooseFolder,onPreview,on
 
 function DuplicatesPage({rootPath,setRootPath,groups,onChooseFolder,onScan,busy}:{rootPath:string;setRootPath:(v:string)=>void;groups:DuplicateGroup[];onChooseFolder:()=>void;onScan:()=>void;busy:boolean}) { return <section className="stack"><div className="panel"><label htmlFor="dup-folder">Folder to inspect</label><div className="input-row"><input id="dup-folder" value={rootPath} onChange={e=>setRootPath(e.target.value)} placeholder="Choose a folder or paste its path"/><button onClick={onChooseFolder} disabled={busy}>Choose folder</button><button className="primary" onClick={onScan} disabled={busy}>Find candidates</button></div><p className="hint">Uses BLAKE3 hashes after a size pre-filter. SortSmith reports duplicates but never auto-deletes them.</p></div><div className="panel">{groups.length===0?<Empty icon="≈" title="No duplicate groups shown" text="Start a scan to compare file content safely."/>:<div className="cards">{groups.map(g=><article className="dup-card" key={g.hash}><div className="panel-head"><strong>{g.files.length} identical files</strong><span>{formatBytes(g.size)} each</span></div>{g.files.map(f=><code key={f.path}>{f.path}</code>)}</article>)}</div>}</div></section>; }
 
-function SettingsPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<void>}) { const s=state.settings; const set=(patch:Partial<typeof s>)=>persist({...state,settings:{...s,...patch}}); return <section className="stack"><div className="panel settings"><h3>Appearance</h3><label>Theme<select value={s.theme} onChange={e=>set({theme:e.target.value as typeof s.theme})}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><Switch label="Reduce motion" checked={s.reducedMotion} onChange={v=>set({reducedMotion:v})}/></div><div className="panel settings"><h3>Organization</h3><Switch label="Confirm before applying changes" checked={s.confirmBeforeApply} onChange={v=>set({confirmBeforeApply:v})}/><Switch label="Scan subfolders" checked={s.recursiveScan} onChange={v=>set({recursiveScan:v})}/><Switch label="Include hidden files" checked={s.includeHidden} onChange={v=>set({includeHidden:v})}/></div><SettingsDataTools state={state} persist={persist}/><div className="panel"><h3>Privacy & data</h3><p>SortSmith works locally. It does not send filenames or file contents to a server. Operation journals contain paths needed for undo and stay in the app data directory.</p></div></section>; }
+function SettingsPage({state,persist}:{state:AppStateData;persist:(s:AppStateData)=>Promise<boolean>}) { const s=state.settings; const set=(patch:Partial<typeof s>)=>persist({...state,settings:{...s,...patch}}); return <section className="stack"><div className="panel settings"><h3>Appearance</h3><label>Theme<select value={s.theme} onChange={e=>set({theme:e.target.value as typeof s.theme})}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><Switch label="Reduce motion" checked={s.reducedMotion} onChange={v=>set({reducedMotion:v})}/></div><div className="panel settings"><h3>Organization</h3><Switch label="Confirm before applying changes" checked={s.confirmBeforeApply} onChange={v=>set({confirmBeforeApply:v})}/><Switch label="Scan subfolders" checked={s.recursiveScan} onChange={v=>set({recursiveScan:v})}/><Switch label="Include hidden files" checked={s.includeHidden} onChange={v=>set({includeHidden:v})}/></div><SettingsDataTools state={state} persist={persist}/><div className="panel"><h3>Privacy & data</h3><p>SortSmith works locally. It does not send filenames or file contents to a server. Operation journals contain paths needed for undo and stay in the app data directory.</p></div></section>; }
 
 function AboutPage(){ return <section className="stack"><div className="about-card"><div className="logo-large">S</div><p className="eyebrow">Version {packageMetadata.version}</p><h2>SortSmith</h2><p>A private, reversible file organizer for Windows, macOS, and Linux.</p><div className="link-grid"><a href="https://github.com/sanskarIN" target="_blank" rel="noreferrer">GitHub</a><a href="https://buymeacoffee.com/sanskarIN" target="_blank" rel="noreferrer">Buy Me a Coffee</a><a href="mailto:sanskarin@outlook.in">Business email</a><a href="mailto:sanskarin.business@gmail.com">Business Gmail</a><a href="mailto:supportramsandesh@gmail.com">Support</a></div><p>Licensed under Apache-2.0.</p><strong>{strings.madeBy}</strong></div></section>; }
 

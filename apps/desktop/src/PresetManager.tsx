@@ -6,7 +6,7 @@ import type { AppStateData, Rule } from "./types";
 interface PresetManagerProps {
   state: AppStateData;
   effectiveRules: Rule[];
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 export function PresetManager({ state, effectiveRules, persist }: PresetManagerProps) {
@@ -46,7 +46,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     try {
       if (state.presets.length >= 50) throw new Error("This build supports up to 50 saved presets.");
       const preset = createPreset(newName, newDescription, effectiveRules);
-      await persist({ ...state, presets: [...state.presets, preset] });
+      if (!await persist({ ...state, presets: [...state.presets, preset] })) return;
       setSelectedId(preset.id);
       setNewName("");
       setNewDescription("");
@@ -61,7 +61,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     setError("");
     setMessage("");
     try {
-      await persist({ ...state, rules: cloneRules(selected.rules) });
+      if (!await persist({ ...state, rules: cloneRules(selected.rules) })) return;
       setMessage(`Loaded “${selected.name}” into the active rule set.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -74,10 +74,10 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     setMessage("");
     try {
       const updated = renamePreset(selected, editName, editDescription);
-      await persist({
+      if (!await persist({
         ...state,
         presets: state.presets.map(preset => preset.id === selected.id ? updated : preset),
-      });
+      })) return;
       setMessage(`Updated preset “${updated.name}”.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -90,7 +90,7 @@ export function PresetManager({ state, effectiveRules, persist }: PresetManagerP
     setError("");
     setMessage("");
     try {
-      await persist({ ...state, presets: state.presets.filter(preset => preset.id !== selected.id) });
+      if (!await persist({ ...state, presets: state.presets.filter(preset => preset.id !== selected.id) })) return;
       setSelectedId(state.presets[0]?.id ?? "");
       setMessage(`Deleted preset “${selected.name}”.`);
     } catch (caught) {
