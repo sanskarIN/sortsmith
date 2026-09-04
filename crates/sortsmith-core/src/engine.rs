@@ -248,21 +248,25 @@ mod tests {
 
     #[test]
     fn relative_root_execution_produces_an_undoable_absolute_journal() {
-        let parent = tempdir().unwrap();
-        let root = parent.path().join("workspace");
-        let journals = parent.path().join("journals");
+        let current = std::env::current_dir().unwrap();
+        let relative_name = format!(".sortsmith-relative-root-{}", Uuid::new_v4());
+        let relative_root = PathBuf::from(&relative_name);
+        let root = current.join(&relative_root);
+        let journals = current.join(format!(".sortsmith-relative-journals-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("note.txt"), b"hello").unwrap();
-        let relative_root = std::path::PathBuf::from(".").join(root.strip_prefix(std::env::current_dir().unwrap()).unwrap_or(&root));
-        let preview = preview_organization(&root, &[txt_rule()], &ScanOptions::default()).unwrap();
-        let report = execute_preview(&root, &preview, &journals).unwrap();
+
+        let preview = preview_organization(&relative_root, &[txt_rule()], &ScanOptions::default()).unwrap();
+        let report = execute_preview(&relative_root, &preview, &journals).unwrap();
         assert!(report.journal.root.is_absolute());
         assert!(report.journal.entries[0].from.is_absolute());
         assert!(report.journal.entries[0].to.is_absolute());
-        assert!(relative_root.components().next().is_some());
         let journal_path = journals.join(format!("{}.journal.json", report.journal.id));
         assert_eq!(undo_journal(&journal_path).unwrap().completed, 1);
         assert!(root.join("note.txt").exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
+        std::fs::remove_dir_all(&journals).unwrap();
     }
 
     #[test]
