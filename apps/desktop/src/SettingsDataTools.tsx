@@ -5,7 +5,7 @@ import type { AppStateData } from "./types";
 
 interface SettingsDataToolsProps {
   state: AppStateData;
-  persist: (state: AppStateData) => Promise<void>;
+  persist: (state: AppStateData) => Promise<boolean>;
 }
 
 export function SettingsDataTools({ state, persist }: SettingsDataToolsProps) {
@@ -34,7 +34,7 @@ export function SettingsDataTools({ state, persist }: SettingsDataToolsProps) {
       if (!path) return;
       const imported = await backend.importState(path);
       if (!window.confirm("Replace your current SortSmith preferences, rules, presets, and watched folders with this backup?")) return;
-      await persist({ ...imported, recentJournalIds: state.recentJournalIds });
+      if (!await persist({ ...imported, recentJournalIds: state.recentJournalIds })) return;
       setMessage("Settings backup imported. Local undo history was preserved.");
     } catch (error) {
       setMessage(`Import failed: ${String(error)}`);
