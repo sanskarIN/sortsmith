@@ -12,19 +12,21 @@
 
 ## v0.1.6 implementation
 
-### Version synchronization
-
-Release metadata is synchronized to `0.1.6` in the Rust workspace, desktop package, and Tauri application configuration.
-
 ### Public API-level symlink traversal coverage
 
 The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 adds a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` that exercises `preview_organization` and verifies an external linked directory produces no planned operation and no scanned nested external file.
 
 ### Windows filename portability hardening
 
-`crates/sortsmith-core/src/safety.rs` now rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`. Regression coverage verifies these aliases are rejected while `COM0` remains valid.
+`crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names, including `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
 
-This closes a cross-platform filename-validation edge case without changing valid ordinary filenames.
+The same collision planner now treats reserved destination paths case-insensitively on Windows. This matters because Windows path comparison is case-insensitive while `HashSet<PathBuf>` equality is not. Without this normalization, two preview operations could reserve differently cased spellings of the same Windows destination and converge on one physical path.
+
+A Windows-specific regression test covers differently cased reserved paths and verifies that the next collision suffix is selected.
+
+### Release metadata
+
+Version `0.1.6` is synchronized across the Rust workspace, desktop package, and Tauri application configuration.
 
 ## v0.1.6 documentation
 
@@ -33,22 +35,9 @@ This closes a cross-platform filename-validation edge case without changing vali
 - `docs/release-v0.1.6-checklist.md` contains release validation and publication gates.
 - This handoff records the actual implementation and documentation work.
 
-## Commits created in this continuation
+## Important history note
 
-1. `3d0e2f0a81c3da2713c26c96dd14fa5539e78323` — `release: bump workspace version to 0.1.6`
-2. `2be3b2697d8857e10d3a5c7c0e7c384732e775b6` — `release(frontend): bump desktop version to 0.1.6`
-3. `3e1a7ebe2cc3fc8860fd81094b49dfc1886916df` — `release(tauri): bump application version to 0.1.6`
-4. `5e433d4b0df184c50488fdf7132a0a5736b65505` — `test(core): add public symlink traversal safety regression`
-5. `a50d4009fb917e757419882b858fb29a61ad7dcd` — `docs(changelog): prepare v0.1.6 integration safety maintenance release`
-6. `41943976645f080f1a1e5b835a8aa19e03e2587b` — `docs(release): add v0.1.6 stable release notes`
-7. `185f0c0d0861c1cb99f428782ace80ab7b509b6e` — `docs(release): add v0.1.6 stable release checklist`
-8. `b8eda6f46312bbb9062170633890efefe53d3169` — `test(core): cover Windows UTF-16 filename boundary`
-9. `81b8731db92b8c30a1b5a202b6070742a1f0150a` — `refactor(core): normalize rule validation test fixture formatting`
-10. `e8c1962711d7769d9b6c09f5c2688ee3cc0705e8` — `fix(core): reject Unicode Windows device-name aliases`
-11. `de324a0eb86179b30b3f236ece34d8741a9bfe36` — `docs(release): refine v0.1.6 release notes with portability fix`
-12. `a476b2bf0b28741417458e800f9f500aaffd7f92` — `docs(changelog): record v0.1.6 portability hardening`
-
-The branch now contains 20 commits ahead of `release/0.1.5` including the earlier v0.1.6 preparation commits and this continuation. No empty commits were intentionally created merely to inflate history.
+Not every earlier v0.1.6 preparation commit represents product functionality. In particular, the earlier rule-test formatting refactor is documentation/maintenance noise rather than a feature claim. The substantive code work for this continuation is the symlink integration regression coverage, Unicode Windows device-name validation, and Windows case-insensitive reserved-destination collision handling.
 
 ## Verification status
 
@@ -75,7 +64,7 @@ npm run build
 npm run tauri build
 ```
 
-The Unix public symlink regression and filename portability tests should execute as part of the workspace test suite on Unix-capable runners.
+The Unix public symlink regression and Windows-specific collision test should execute on their respective platforms as part of the workspace test suite.
 
 ## Stable release procedure
 
