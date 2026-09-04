@@ -70,10 +70,7 @@ pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<
     let stem = destination.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
     let ext = destination.extension().and_then(|e| e.to_str());
     for n in 1..=100_000u32 {
-        let filename = match ext {
-            Some(ext) => format!("{stem} ({n}).{ext}"),
-            None => format!("{stem} ({n})"),
-        };
+        let filename = collision_filename(stem, ext, &n.to_string());
         let candidate = parent.join(filename);
         if !candidate.exists() && !reserved_contains(reserved, &candidate) {
             return candidate;
@@ -81,15 +78,33 @@ pub fn collision_safe_path_with_reserved(destination: &Path, reserved: &HashSet<
     }
 
     loop {
-        let suffix = uuid::Uuid::new_v4().simple();
-        let filename = match ext {
-            Some(ext) => format!("{stem} ({suffix}).{ext}"),
-            None => format!("{stem} ({suffix})"),
-        };
+        let suffix = uuid::Uuid::new_v4().simple().to_string();
+        let filename = collision_filename(stem, ext, &suffix);
         let candidate = parent.join(filename);
         if !candidate.exists() && !reserved_contains(reserved, &candidate) {
             return candidate;
         }
+    }
+}
+
+fn collision_filename(stem: &str, ext: Option<&str>, suffix: &str) -> String {
+    let extension = ext.map_or(0, |value| value.encode_utf16().count() + 1);
+    let suffix_units = suffix.encode_utf16().count() + 3;
+    let max_stem_units = 255usize.saturating_sub(extension + suffix_units);
+    let max_stem_bytes = 255usize.saturating_sub(ext.map_or(0, |value| value.len() + 1) + suffix.len() + 3);
+    let mut fitted = String::new();
+    for ch in stem.chars() {
+        let next_units = fitted.encode_utf16().count() + ch.len_utf16();
+        let next_bytes = fitted.len() + ch.len_utf8();
+        if next_units > max_stem_units || next_bytes > max_stem_bytes {
+            break;
+        }
+        fitted.push(ch);
+    }
+    let fitted = fitted.trim_end_matches([' ', '.']);
+    match ext {
+        Some(ext) => format!("{fitted} ({suffix}).{ext}"),
+        None => format!("{fitted} ({suffix})"),
     }
 }
 
@@ -178,6 +193,18 @@ mod tests {
         reserved.insert(dir.path().join("report (1).pdf"));
         let candidate = collision_safe_path_with_reserved(&desired, &reserved);
         assert_eq!(candidate.file_name().unwrap(), "report (2).pdf");
+    }
+
+    #[test]
+    fn collision_name_is_bounded_to_portable_filename_limits() {
+        let dir = tempdir().unwrap();
+        let existing = dir.path().join(format!("{}.txt", "a".repeat(251)));
+        std::fs::write(&existing, b"x").unwrap();
+        let candidate = collision_safe_path(&existing);
+        let filename = candidate.file_name().unwrap().to_string_lossy();
+        assert!(filename.len() <= 255);
+        assert!(filename.encode_utf16().count() <= 255);
+        assert!(filename.ends_with(" (1).txt"));
     }
 
     #[cfg(windows)]
