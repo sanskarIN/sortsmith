@@ -24,6 +24,18 @@ The integration coverage exercises the public `preview_organization` API and ver
 
 This complements the existing unit coverage and keeps the security boundary tested from outside the core module implementation.
 
+### Main CI/build stabilization
+
+Fixed the 0.3.0 main-line Rust build blockers found by GitHub Actions:
+
+- corrected symlink pruning predicate precedence in `engine.rs`;
+- corrected the same predicate in `duplicates.rs`;
+- fixed journal path normalization so fallible absolute-path conversion is propagated from the iterator closure;
+- restored scan-cache metadata construction locally in `scan_cache.rs`, removing the stale dependency on a missing engine helper;
+- updated frontend CI to npm `11.6.0` with `--legacy-peer-deps`, matching the dependency-install path that avoids the observed npm resolver failure.
+
+The failed CI run had exposed real compile errors in `scan_cache.rs`, `duplicates.rs`, `engine.rs`, and `journal.rs`, plus an npm `edgesOut` resolver failure. These were treated as implementation issues rather than ignored CI noise.
+
 ### Release-line cleanup
 
 The stale `release/0.1.8` pull request was closed because it had diverged substantially from the active `main` development line and was not mergeable. The 0.1.8 work is not being force-applied over the newer 0.3.0 main history.
@@ -51,7 +63,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 cd apps/desktop
-npm install --no-audit --no-fund
+npm install --legacy-peer-deps --no-audit --no-fund
 npm run typecheck
 npm test
 npm run build
@@ -61,8 +73,8 @@ Filesystem behavior should additionally be reviewed for preview-only planning, r
 
 ## Next main-line priorities
 
-1. Verify the new public symlink regression tests through GitHub Actions.
-2. Resolve any CI failures on the actual 0.3.0 main implementation rather than copying an old maintenance branch over main.
+1. Verify the latest Rust fixes and npm changes through GitHub Actions.
+2. Fix any remaining compile, lint, format, test, typecheck, or build failures on the actual 0.3.0 main implementation.
 3. Continue the 0.3 development line with small, independently verifiable commits.
 4. Keep `what_changed.md` synchronized after each substantive project milestone.
 5. Only create a release tag after version metadata, tests, packaging, and release artifacts have all passed their required gates.
