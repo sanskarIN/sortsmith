@@ -11,7 +11,9 @@ fn extension_rule(action: RuleAction) -> Rule {
         name: "property rule".into(),
         enabled: true,
         match_all: true,
-        criteria: vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
+        criteria: vec![RuleCriterion::Extension {
+            values: vec!["txt".into()],
+        }],
         action,
     }
 }
