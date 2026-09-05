@@ -37,9 +37,7 @@ pub fn preview_organization(
         if !options.include_hidden && is_hidden(e, root) {
             return false;
         }
-        options.follow_links
-            && entry_resolves_outside_root(e, &canonical_root)
-                == Some(true).then_some(false).unwrap_or(true)
+        options.follow_links && entry_resolves_outside_root(e, &canonical_root) != Some(true)
     }) {
         let entry = match item {
             Ok(v) => v,

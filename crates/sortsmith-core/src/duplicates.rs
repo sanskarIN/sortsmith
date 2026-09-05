@@ -25,8 +25,7 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
                 return false;
             }
             options.follow_links
-                && entry_resolves_outside_root(entry, &canonical_root)
-                    == Some(true).then_some(false).unwrap_or(true)
+                && entry_resolves_outside_root(entry, &canonical_root) != Some(true)
         })
     {
         let Ok(entry) = item else {

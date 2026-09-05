@@ -36,10 +36,12 @@ fn normalize_journal_paths(journal: &OperationJournal) -> Result<OperationJourna
     let entries = journal
         .entries
         .iter()
-        .map(|entry| crate::models::JournalEntry {
-            operation_id: entry.operation_id,
-            from: make_absolute(&entry.from)?,
-            to: make_absolute(&entry.to)?,
+        .map(|entry| {
+            Ok(crate::models::JournalEntry {
+                operation_id: entry.operation_id,
+                from: make_absolute(&entry.from)?,
+                to: make_absolute(&entry.to)?,
+            })
         })
         .collect::<Result<Vec<_>>>()?;
 
