@@ -31,50 +31,48 @@ impl<'a> PreparedRule<'a> {
         if !self.rule.enabled {
             return false;
         }
-        let matches =
-            self.rule
-                .criteria
-                .iter()
-                .zip(&self.regexes)
-                .map(|(criterion, prepared_regex)| match criterion {
-                    RuleCriterion::Extension { values } => {
-                        file.extension.as_ref().is_some_and(|ext| {
-                            values
-                                .iter()
-                                .any(|v| v.trim_start_matches('.').eq_ignore_ascii_case(ext))
+        let matches = self
+            .rule
+            .criteria
+            .iter()
+            .zip(&self.regexes)
+            .map(|(criterion, prepared_regex)| match criterion {
+                RuleCriterion::Extension { values } => {
+                    file.extension.as_ref().is_some_and(|ext| {
+                        values
+                            .iter()
+                            .any(|v| v.trim_start_matches('.').eq_ignore_ascii_case(ext))
+                    })
+                }
+                RuleCriterion::MimePrefix { values } => {
+                    file.mime.as_ref().is_some_and(|mime| {
+                        values.iter().any(|prefix| {
+                            mime.to_ascii_lowercase()
+                                .starts_with(&prefix.to_ascii_lowercase())
                         })
-                    }
-                    RuleCriterion::MimePrefix { values } => {
-                        file.mime.as_ref().is_some_and(|mime| {
-                            values.iter().any(|prefix| {
-                                mime.to_ascii_lowercase()
-                                    .starts_with(&prefix.to_ascii_lowercase())
-                            })
-                        })
-                    }
-                    RuleCriterion::ModifiedOlderThanDays { days } => file
-                        .modified_at
-                        .is_some_and(|m| m < Utc::now() - Duration::days(i64::from(*days))),
-                    RuleCriterion::SizeRange {
-                        min_bytes,
-                        max_bytes,
-                    } => {
-                        min_bytes.is_none_or(|m| file.size >= m)
-                            && max_bytes.is_none_or(|m| file.size <= m)
-                    }
-                    RuleCriterion::NameRegex { .. } => {
-                        prepared_regex.as_ref().is_some_and(|regex| {
-                            file.path
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .is_some_and(|name| regex.is_match(name))
-                        })
-                    }
-                });
+                    })
+                }
+                RuleCriterion::ModifiedOlderThanDays { days } => file
+                    .modified_at
+                    .is_some_and(|m| m < Utc::now() - Duration::days(i64::from(*days))),
+                RuleCriterion::SizeRange {
+                    min_bytes,
+                    max_bytes,
+                } => {
+                    min_bytes.is_none_or(|m| file.size >= m)
+                        && max_bytes.is_none_or(|m| file.size <= m)
+                }
+                RuleCriterion::NameRegex { .. } => prepared_regex.as_ref().is_some_and(|regex| {
+                    file.path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|name| regex.is_match(name))
+                }),
+            });
         if self.rule.match_all {
-            matches.fold(true, |all, matched| all && matched)
+            matches.all(|matched| matched)
         } else {
-            matches.fold(false, |any, matched| any || matched)
+            matches.any(|matched| matched)
         }
     }
 }
@@ -118,13 +116,13 @@ pub fn validate_rule(rule: &Rule) -> Result<()> {
                         rule.name
                     )));
                 }
-                if let (Some(minimum), Some(maximum)) = (min_bytes, max_bytes) {
-                    if minimum > maximum {
-                        return Err(SortSmithError::InvalidRule(format!(
-                            "'{}' has a minimum size larger than its maximum",
-                            rule.name
-                        )));
-                    }
+                if let (Some(minimum), Some(maximum)) = (min_bytes, max_bytes)
+                    && minimum > maximum
+                {
+                    return Err(SortSmithError::InvalidRule(format!(
+                        "'{}' has a minimum size larger than its maximum",
+                        rule.name
+                    )));
                 }
             }
             RuleCriterion::NameRegex { pattern } => {
