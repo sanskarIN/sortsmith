@@ -23,7 +23,10 @@ pub fn preview_organization(root: &Path, rules: &[Rule], options: &ScanOptions) 
         if !options.include_hidden && is_hidden(e, root) {
             return false;
         }
-        options.follow_links && entry_resolves_outside_root(e, &canonical_root) == Some(true).then_some(false).unwrap_or(true)
+        if options.follow_links {
+            return entry_resolves_outside_root(e, &canonical_root) != Some(true);
+        }
+        true
     }) {
         let entry = match item {
             Ok(v) => v,
