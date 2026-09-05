@@ -23,6 +23,33 @@ jobs:
         with:
           components: rustfmt
 
+      - name: Fix release branch source issues
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path("crates/sortsmith-core/src/duplicates.rs"): (
+                  "options.follow_links\n                && entry_resolves_outside_root(entry, &canonical_root)\n                    == Some(true).then_some(false).unwrap_or(true)",
+                  "options.follow_links\n                && entry_resolves_outside_root(entry, &canonical_root)\n                    != Some(true)",
+              ),
+              Path("crates/sortsmith-core/src/engine.rs"): (
+                  "options.follow_links\n            && entry_resolves_outside_root(e, &canonical_root)\n                == Some(true).then_some(false).unwrap_or(true)",
+                  "options.follow_links\n            && entry_resolves_outside_root(e, &canonical_root)\n                != Some(true)",
+              ),
+              Path("crates/sortsmith-core/src/journal.rs"): (
+                  ".map(|entry| crate::models::JournalEntry {\n            operation_id: entry.operation_id,\n            from: make_absolute(&entry.from)?,\n            to: make_absolute(&entry.to)?,\n        })\n        .collect::<Result<Vec<_>>>()?",
+                  ".map(|entry| {\n            Ok(crate::models::JournalEntry {\n                operation_id: entry.operation_id,\n                from: make_absolute(&entry.from)?,\n                to: make_absolute(&entry.to)?,\n            })\n        })\n        .collect::<Result<Vec<_>>>()?",
+              ),
+          }
+
+          for path, (old, new) in replacements.items():
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected source pattern not found: {path}")
+              path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Format Rust sources
         run: cargo fmt --all
 
@@ -39,5 +66,5 @@ jobs:
           git config user.name "Sanskar"
           git config user.email "sanskarin@outlook.in"
           git add --all
-          git commit -m "style(release): format Rust and lock frontend dependencies"
+          git commit -m "fix(release): resolve Rust compilation issues and stabilize dependencies"
           git push origin HEAD:release/0.1.8
