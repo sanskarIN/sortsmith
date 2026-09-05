@@ -67,7 +67,7 @@ jobs:
       - name: Upgrade npm
         run: npm install --global npm@11.6.0
       - name: Install frontend dependencies
-        run: npm ci --legacy-peer-deps --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
       - name: Test
