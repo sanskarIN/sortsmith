@@ -20,7 +20,10 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
             if !options.include_hidden && is_hidden(entry, root) {
                 return false;
             }
-            options.follow_links && entry_resolves_outside_root(entry, &canonical_root) == Some(true).then_some(false).unwrap_or(true)
+            if options.follow_links {
+                return entry_resolves_outside_root(entry, &canonical_root) != Some(true);
+            }
+            true
         })
     {
         let Ok(entry) = item else { continue; };
