@@ -1,4 +1,4 @@
-name: Format release branch
+name: Prepare release branch
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  format:
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,17 +23,21 @@ jobs:
         with:
           components: rustfmt
 
-      - name: Format Rust
+      - name: Format Rust sources
         run: cargo fmt --all
 
-      - name: Commit formatted sources
+      - name: Generate frontend lockfile
+        working-directory: apps/desktop
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --legacy-peer-deps
+
+      - name: Commit preparation changes
         run: |
           if git diff --quiet; then
-            echo "Rust sources are already formatted."
+            echo "Release branch is already prepared."
             exit 0
           fi
           git config user.name "Sanskar"
           git config user.email "sanskarin@outlook.in"
           git add --all
-          git commit -m "style: apply rustfmt to v0.1.8 release branch"
+          git commit -m "style(release): format Rust and lock frontend dependencies"
           git push origin HEAD:release/0.1.8
