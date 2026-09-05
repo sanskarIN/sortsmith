@@ -38,7 +38,7 @@ pub fn validate_filename(filename: &str, label: &str) -> Result<()> {
             "{label} cannot be empty or a reserved path component"
         )));
     }
-    if filename.as_bytes().len() > 255 || filename.encode_utf16().count() > 255 {
+    if filename.len() > 255 || filename.encode_utf16().count() > 255 {
         return Err(SortSmithError::InvalidRule(format!(
             "{label} is too long for a portable filename"
         )));
