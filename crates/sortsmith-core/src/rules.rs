@@ -34,7 +34,7 @@ impl<'a> PreparedRule<'a> {
             RuleCriterion::SizeRange { min_bytes, max_bytes } => min_bytes.is_none_or(|m| file.size >= m) && max_bytes.is_none_or(|m| file.size <= m),
             RuleCriterion::NameRegex { .. } => prepared_regex.as_ref().is_some_and(|regex| file.path.file_name().and_then(|n| n.to_str()).is_some_and(|name| regex.is_match(name))),
         });
-        if self.rule.match_all { matches.fold(true, |all, matched| all && matched) } else { matches.fold(false, |any, matched| any || matched) }
+        if self.rule.match_all { matches.all(|matched| matched) } else { matches.any(|matched| matched) }
     }
 }
 
@@ -57,8 +57,8 @@ pub fn validate_rule(rule: &Rule) -> Result<()> {
                 if min_bytes.is_none() && max_bytes.is_none() {
                     return Err(SortSmithError::InvalidRule(format!("'{}' has an empty size range", rule.name)));
                 }
-                if let (Some(minimum), Some(maximum)) = (min_bytes, max_bytes) {
-                    if minimum > maximum { return Err(SortSmithError::InvalidRule(format!("'{}' has a minimum size larger than its maximum", rule.name))); }
+                if let (Some(minimum), Some(maximum)) = (min_bytes, max_bytes) && minimum > maximum {
+                    return Err(SortSmithError::InvalidRule(format!("'{}' has a minimum size larger than its maximum", rule.name)));
                 }
             }
             RuleCriterion::NameRegex { pattern } => {
