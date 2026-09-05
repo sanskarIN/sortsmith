@@ -10,7 +10,7 @@
 
 SortSmith is an offline-first desktop file organizer built with **Rust + Tauri + React**. It previews changes before touching the filesystem, records reversible operation journals, detects duplicate candidates by content hash without deleting them, and can run user-controlled watched-folder rules while the app is open.
 
-> **Development status:** the `0.1.0` implementation baseline is in place. Do not treat it as a published release until cross-platform CI, clean installer smoke tests, and the release checklist are green.
+> **Development status:** the `0.1.x` maintenance line has reached v0.1.8 preparation. The dedicated `release/0.1.8` branch is kept separate from the `main` branch's 0.3.x feature-development line. A release tag must only be published after the complete validation and installer checks are green.
 
 ## Screenshots
 
@@ -77,49 +77,3 @@ npm run typecheck
 npm test
 npm run build
 ```
-
-CI separately exercises the core crate, Tauri desktop host, and frontend so failures remain easy to diagnose. Timing-sensitive Criterion measurements should be compared on the same local machine/toolchain rather than treated as stable shared-runner numbers.
-
-## Build and release
-
-```bash
-cd apps/desktop
-npm install --no-audit --no-fund
-npm run tauri build
-```
-
-Before creating a version tag, verify that Cargo, frontend, and Tauri metadata all match:
-
-```bash
-node scripts/verify-release-version.mjs v0.1.0
-```
-
-Packaging is automated by `.github/workflows/release.yml` for `v*` tags and repeats the version check before building on Windows, macOS, and Linux. Release guidance is in [`docs/release.md`](docs/release.md).
-
-## Architecture
-
-The repository is a modular monolith: deterministic filesystem domain logic lives in `crates/sortsmith-core`; Tauri commands adapt that logic to the desktop runtime; the React frontend owns presentation and interaction. See [`docs/architecture.md`](docs/architecture.md) and [`docs/adr/`](docs/adr/).
-
-## Security and privacy
-
-SortSmith deliberately avoids network features in its core workflows. It does not upload file contents or filenames. Undo journals contain local file paths because reversal requires them; portable settings backups omit undo-history identifiers. Saved settings and imported backups are bounded and validated before use, and privacy-safe operation logs contain counts/identifiers rather than file paths or content. See [`SECURITY.md`](SECURITY.md) and [`PRIVACY.md`](PRIVACY.md).
-
-## Contributing
-
-Contributions are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md), run the quality suite, and use focused Conventional Commit messages.
-
-## License
-
-Apache License 2.0. See [`LICENSE`](LICENSE).
-
-## Contact and support
-
-- Business: `sanskarin@outlook.in`
-- Business: `sanskarin.business@gmail.com`
-- Support: `supportramsandesh@gmail.com`
-- GitHub: https://github.com/sanskarIN
-- Funding: https://buymeacoffee.com/sanskarIN
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-sanskarIN-FFDD00?logo=buy-me-a-coffee&logoColor=000000)](https://buymeacoffee.com/sanskarIN)
-
-**Made by the Sanskar**
