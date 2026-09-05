@@ -1,0 +1,39 @@
+name: Format release branch
+
+on:
+  push:
+    branches:
+      - 'release/0.1.8'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: release/0.1.8
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Format Rust
+        run: cargo fmt --all
+
+      - name: Commit formatted sources
+        run: |
+          if git diff --quiet; then
+            echo "Rust sources are already formatted."
+            exit 0
+          fi
+          git config user.name "Sanskar"
+          git config user.email "sanskarin@outlook.in"
+          git add --all
+          git commit -m "style: apply rustfmt to v0.1.8 release branch"
+          git push origin HEAD:release/0.1.8
