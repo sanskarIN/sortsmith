@@ -1,10 +1,10 @@
-use crate::engine::describe_file_from_metadata;
 use crate::models::{FileEntry, PlannedOperation, PreviewResult, Rule, RuleCriterion, ScanOptions};
 use crate::rules::{destination_for, PreparedRule};
 use crate::safety::collision_safe_path_with_reserved;
 use crate::Result;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
@@ -162,6 +162,20 @@ pub fn preview_organization_cached(
     cache.entries.retain(|path, _| seen.contains(path));
     cache.stats.cached_entries = cache.entries.len();
     Ok(result)
+}
+
+fn describe_file_from_metadata(root: &Path, path: &Path, metadata: &fs::Metadata) -> FileEntry {
+    let modified_at = metadata.modified().ok().map(DateTime::<Utc>::from);
+    let extension = path.extension().and_then(|value| value.to_str()).map(|value| value.to_ascii_lowercase());
+    let mime = mime_guess::from_path(path).first().map(|value| value.essence_str().to_string());
+    FileEntry {
+        path: path.to_path_buf(),
+        relative_path: path.strip_prefix(root).unwrap_or(path).to_path_buf(),
+        size: metadata.len(),
+        modified_at,
+        mime,
+        extension,
+    }
 }
 
 fn entry_resolves_outside_root(entry: &DirEntry, canonical_root: &Path) -> Option<bool> {
