@@ -1,1 +1,3 @@
-fn main() { sortsmith_lib::run(); }
+fn main() {
+    sortsmith_lib::run();
+}

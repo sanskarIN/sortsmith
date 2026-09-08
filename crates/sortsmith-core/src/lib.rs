@@ -13,4 +13,4 @@ pub use duplicates::find_duplicates;
 pub use engine::{execute_preview, preview_organization, undo_journal};
 pub use error::{Result, SortSmithError};
 pub use models::*;
-pub use scan_cache::{preview_organization_cached, ScanCache, ScanCacheStats};
+pub use scan_cache::{ScanCache, ScanCacheStats, preview_organization_cached};

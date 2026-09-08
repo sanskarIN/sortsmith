@@ -1,4 +1,4 @@
-use crate::{error::SortSmithError, Result};
+use crate::{Result, error::SortSmithError};
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
@@ -7,7 +7,12 @@ pub fn safe_subdirectory(root: &Path, subdirectory: &str) -> Result<PathBuf> {
     if candidate.as_os_str().is_empty() || candidate.is_absolute() {
         return Err(SortSmithError::UnsafeDestination(candidate.to_path_buf()));
     }
-    if candidate.components().any(|c| matches!(c, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+    if candidate.components().any(|c| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
         return Err(SortSmithError::UnsafeDestination(candidate.to_path_buf()));
     }
     Ok(root.join(candidate))
@@ -15,40 +20,87 @@ pub fn safe_subdirectory(root: &Path, subdirectory: &str) -> Result<PathBuf> {
 
 pub fn validate_filename_fragment(fragment: &str, label: &str) -> Result<()> {
     if fragment.trim().is_empty() {
-        return Err(SortSmithError::InvalidRule(format!("{label} cannot be empty")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} cannot be empty"
+        )));
     }
     if contains_invalid_filename_character(fragment) {
-        return Err(SortSmithError::InvalidRule(format!("{label} contains a character that is unsafe in a cross-platform filename")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} contains a character that is unsafe in a cross-platform filename"
+        )));
     }
     Ok(())
 }
 
 pub fn validate_filename(filename: &str, label: &str) -> Result<()> {
     if filename.is_empty() || matches!(filename, "." | "..") {
-        return Err(SortSmithError::InvalidRule(format!("{label} cannot be empty or a reserved path component")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} cannot be empty or a reserved path component"
+        )));
     }
     if filename.len() > 255 || filename.encode_utf16().count() > 255 {
-        return Err(SortSmithError::InvalidRule(format!("{label} is too long for a portable filename")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} is too long for a portable filename"
+        )));
     }
     if contains_invalid_filename_character(filename) {
-        return Err(SortSmithError::InvalidRule(format!("{label} contains a character that is unsafe in a cross-platform filename")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} contains a character that is unsafe in a cross-platform filename"
+        )));
     }
     if filename.ends_with([' ', '.']) {
-        return Err(SortSmithError::InvalidRule(format!("{label} cannot end with a space or period")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} cannot end with a space or period"
+        )));
     }
     if is_windows_reserved_name(filename) {
-        return Err(SortSmithError::InvalidRule(format!("{label} uses a Windows-reserved device name")));
+        return Err(SortSmithError::InvalidRule(format!(
+            "{label} uses a Windows-reserved device name"
+        )));
     }
     Ok(())
 }
 
 fn contains_invalid_filename_character(value: &str) -> bool {
-    value.chars().any(|c| matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') || c.is_control())
+    value.chars().any(|c| {
+        matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') || c.is_control()
+    })
 }
 
 fn is_windows_reserved_name(filename: &str) -> bool {
-    let stem = filename.rsplit(['/', '\\']).next().unwrap_or(filename).split('.').next().unwrap_or(filename).to_ascii_uppercase();
-    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6" | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6" | "LPT7" | "LPT8" | "LPT9")
+    let stem = filename
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(filename)
+        .split('.')
+        .next()
+        .unwrap_or(filename)
+        .to_ascii_uppercase();
+    matches!(
+        stem.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    )
 }
 
 pub fn collision_safe_path(path: &Path) -> PathBuf {
@@ -56,7 +108,9 @@ pub fn collision_safe_path(path: &Path) -> PathBuf {
 }
 
 pub fn collision_safe_path_with_reserved(path: &Path, reserved: &HashSet<PathBuf>) -> PathBuf {
-    if !path.exists() && !reserved.contains(path) { return path.to_path_buf(); }
+    if !path.exists() && !reserved.contains(path) {
+        return path.to_path_buf();
+    }
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let stem = path.file_stem().and_then(|v| v.to_str()).unwrap_or("file");
     let extension = path.extension().and_then(|v| v.to_str());
@@ -66,7 +120,9 @@ pub fn collision_safe_path_with_reserved(path: &Path, reserved: &HashSet<PathBuf
             _ => format!("{stem} ({index})"),
         };
         let candidate = parent.join(candidate_name);
-        if !candidate.exists() && !reserved.contains(&candidate) { return candidate; }
+        if !candidate.exists() && !reserved.contains(&candidate) {
+            return candidate;
+        }
     }
     path.to_path_buf()
 }

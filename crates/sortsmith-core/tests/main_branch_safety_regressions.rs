@@ -1,4 +1,4 @@
-use sortsmith_core::{preview_organization, Rule, RuleAction, RuleCriterion, ScanOptions};
+use sortsmith_core::{Rule, RuleAction, RuleCriterion, ScanOptions, preview_organization};
 use tempfile::tempdir;
 use uuid::Uuid;
 
@@ -48,7 +48,11 @@ fn main_branch_ignores_external_file_symlinks() {
     let root = tempdir().unwrap();
     let outside = tempdir().unwrap();
     std::fs::write(outside.path().join("secret.txt"), b"secret").unwrap();
-    symlink(outside.path().join("secret.txt"), root.path().join("linked.txt")).unwrap();
+    symlink(
+        outside.path().join("secret.txt"),
+        root.path().join("linked.txt"),
+    )
+    .unwrap();
 
     let options = ScanOptions {
         recursive: false,
@@ -60,8 +64,10 @@ fn main_branch_ignores_external_file_symlinks() {
 
     assert!(preview.operations.is_empty());
     assert_eq!(preview.ignored_files, 1);
-    assert!(preview
-        .recoverable_errors
-        .iter()
-        .any(|error| error.contains("symbolic link")));
+    assert!(
+        preview
+            .recoverable_errors
+            .iter()
+            .any(|error| error.contains("symbolic link"))
+    );
 }

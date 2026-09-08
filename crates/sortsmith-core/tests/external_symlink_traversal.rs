@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use sortsmith_core::{preview_organization, Rule, RuleAction, RuleCriterion, ScanOptions};
+use sortsmith_core::{Rule, RuleAction, RuleCriterion, ScanOptions, preview_organization};
 use std::os::unix::fs::symlink;
 use tempfile::tempdir;
 use uuid::Uuid;
@@ -11,8 +11,12 @@ fn text_rule() -> Rule {
         name: "Text files".into(),
         enabled: true,
         match_all: true,
-        criteria: vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
-        action: RuleAction::MoveTo { subdirectory: "Text".into() },
+        criteria: vec![RuleCriterion::Extension {
+            values: vec!["txt".into()],
+        }],
+        action: RuleAction::MoveTo {
+            subdirectory: "Text".into(),
+        },
     }
 }
 

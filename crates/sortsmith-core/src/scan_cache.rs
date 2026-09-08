@@ -1,7 +1,7 @@
-use crate::models::{FileEntry, PlannedOperation, PreviewResult, Rule, RuleCriterion, ScanOptions};
-use crate::rules::{destination_for, PreparedRule};
-use crate::safety::collision_safe_path_with_reserved;
 use crate::Result;
+use crate::models::{FileEntry, PlannedOperation, PreviewResult, Rule, RuleCriterion, ScanOptions};
+use crate::rules::{PreparedRule, destination_for};
+use crate::safety::collision_safe_path_with_reserved;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -46,10 +46,16 @@ impl ScanCache {
         self.stats = ScanCacheStats::default();
     }
 
-    pub fn stats(&self) -> ScanCacheStats { self.stats }
+    pub fn stats(&self) -> ScanCacheStats {
+        self.stats
+    }
 
     fn prepare_scope(&mut self, root: &Path, rules: &[Rule], options: &ScanOptions) {
-        let next = ScanCacheScope { root: root.to_path_buf(), rules: rules.to_vec(), options: options.clone() };
+        let next = ScanCacheScope {
+            root: root.to_path_buf(),
+            rules: rules.to_vec(),
+            options: options.clone(),
+        };
         if self.scope.as_ref() != Some(&next) {
             self.entries.clear();
             self.scope = Some(next);
@@ -64,9 +70,17 @@ pub fn preview_organization_cached(
     options: &ScanOptions,
     cache: &mut ScanCache,
 ) -> Result<PreviewResult> {
-    let prepared_rules = rules.iter().filter(|rule| rule.enabled).map(PreparedRule::new).collect::<Result<Vec<_>>>()?;
+    let prepared_rules = rules
+        .iter()
+        .filter(|rule| rule.enabled)
+        .map(PreparedRule::new)
+        .collect::<Result<Vec<_>>>()?;
     let has_time_sensitive_rules = prepared_rules.iter().any(|prepared| {
-        prepared.rule().criteria.iter().any(|criterion| matches!(criterion, RuleCriterion::ModifiedOlderThanDays { .. }))
+        prepared
+            .rule()
+            .criteria
+            .iter()
+            .any(|criterion| matches!(criterion, RuleCriterion::ModifiedOlderThanDays { .. }))
     });
 
     cache.prepare_scope(root, rules, options);
@@ -74,14 +88,21 @@ pub fn preview_organization_cached(
     let mut seen = HashSet::new();
     let mut reserved_destinations = HashSet::new();
     let canonical_root = root.canonicalize().map_err(|e| crate::error::io(root, e))?;
-    let depth = if options.recursive { options.max_depth.unwrap_or(32) } else { 1 };
-    let walker = WalkDir::new(root).follow_links(options.follow_links).max_depth(depth);
+    let depth = if options.recursive {
+        options.max_depth.unwrap_or(32)
+    } else {
+        1
+    };
+    let walker = WalkDir::new(root)
+        .follow_links(options.follow_links)
+        .max_depth(depth);
 
     for item in walker.into_iter().filter_entry(|entry| {
         if !options.include_hidden && is_hidden(entry, root) {
             return false;
         }
-        if options.follow_links && entry_resolves_outside_root(entry, &canonical_root) == Some(true) {
+        if options.follow_links && entry_resolves_outside_root(entry, &canonical_root) == Some(true)
+        {
             return false;
         }
         true
@@ -93,11 +114,15 @@ pub fn preview_organization_cached(
                 continue;
             }
         };
-        if !entry.file_type().is_file() { continue; }
+        if !entry.file_type().is_file() {
+            continue;
+        }
 
         result.scanned_files += 1;
         if options.follow_links && !entry_within_root(entry.path(), &canonical_root) {
-            result.recoverable_errors.push("A symbolic link points outside the selected folder; it was skipped.".into());
+            result
+                .recoverable_errors
+                .push("A symbolic link points outside the selected folder; it was skipped.".into());
             result.ignored_files += 1;
             continue;
         }
@@ -114,7 +139,11 @@ pub fn preview_organization_cached(
         let size = metadata.len();
         seen.insert(path.clone());
 
-        let reused = cache.entries.get(&path).filter(|cached| cached.size == size && cached.modified_at == modified_at).cloned();
+        let reused = cache
+            .entries
+            .get(&path)
+            .filter(|cached| cached.size == size && cached.modified_at == modified_at)
+            .cloned();
         let (file, matched_rule_index) = if let Some(cached) = reused {
             cache.stats.reused_files += 1;
             let matched = if has_time_sensitive_rules {
@@ -128,12 +157,15 @@ pub fn preview_organization_cached(
             cache.stats.rescanned_files += 1;
             let file = describe_file_from_metadata(root, &path, &metadata);
             let matched = first_matching_rule(&prepared_rules, &file);
-            cache.entries.insert(path.clone(), CachedFile {
-                size,
-                modified_at,
-                file: file.clone(),
-                matched_rule_index: matched,
-            });
+            cache.entries.insert(
+                path.clone(),
+                CachedFile {
+                    size,
+                    modified_at,
+                    file: file.clone(),
+                    matched_rule_index: matched,
+                },
+            );
             (file, matched)
         };
 
@@ -166,8 +198,13 @@ pub fn preview_organization_cached(
 
 fn describe_file_from_metadata(root: &Path, path: &Path, metadata: &fs::Metadata) -> FileEntry {
     let modified_at = metadata.modified().ok().map(DateTime::<Utc>::from);
-    let extension = path.extension().and_then(|value| value.to_str()).map(|value| value.to_ascii_lowercase());
-    let mime = mime_guess::from_path(path).first().map(|value| value.essence_str().to_string());
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    let mime = mime_guess::from_path(path)
+        .first()
+        .map(|value| value.essence_str().to_string());
     FileEntry {
         path: path.to_path_buf(),
         relative_path: path.strip_prefix(root).unwrap_or(path).to_path_buf(),
@@ -179,21 +216,35 @@ fn describe_file_from_metadata(root: &Path, path: &Path, metadata: &fs::Metadata
 }
 
 fn entry_resolves_outside_root(entry: &DirEntry, canonical_root: &Path) -> Option<bool> {
-    if !entry.file_type().is_symlink() { return Some(false); }
-    entry.path().canonicalize().ok().map(|resolved| !resolved.starts_with(canonical_root))
+    if !entry.file_type().is_symlink() {
+        return Some(false);
+    }
+    entry
+        .path()
+        .canonicalize()
+        .ok()
+        .map(|resolved| !resolved.starts_with(canonical_root))
 }
 
 fn entry_within_root(path: &Path, canonical_root: &Path) -> bool {
-    path.canonicalize().is_ok_and(|resolved| resolved.starts_with(canonical_root))
+    path.canonicalize()
+        .is_ok_and(|resolved| resolved.starts_with(canonical_root))
 }
 
 fn first_matching_rule(prepared_rules: &[PreparedRule<'_>], file: &FileEntry) -> Option<usize> {
-    prepared_rules.iter().position(|prepared| prepared.matches(file))
+    prepared_rules
+        .iter()
+        .position(|prepared| prepared.matches(file))
 }
 
 fn is_hidden(entry: &DirEntry, root: &Path) -> bool {
-    if entry.path() == root { return false; }
-    entry.file_name().to_str().is_some_and(|name| name.starts_with('.'))
+    if entry.path() == root {
+        return false;
+    }
+    entry
+        .file_name()
+        .to_str()
+        .is_some_and(|name| name.starts_with('.'))
 }
 
 fn redact_walk_error(error: &walkdir::Error) -> String {
@@ -216,8 +267,12 @@ mod tests {
             name: name.into(),
             enabled: true,
             match_all: true,
-            criteria: vec![RuleCriterion::Extension { values: vec!["txt".into()] }],
-            action: RuleAction::MoveTo { subdirectory: destination.into() },
+            criteria: vec![RuleCriterion::Extension {
+                values: vec!["txt".into()],
+            }],
+            action: RuleAction::MoveTo {
+                subdirectory: destination.into(),
+            },
         }
     }
 
@@ -230,7 +285,8 @@ mod tests {
         let options = ScanOptions::default();
         let uncached = preview_organization(root.path(), &rules, &options).unwrap();
         let mut cache = ScanCache::default();
-        let cached = preview_organization_cached(root.path(), &rules, &options, &mut cache).unwrap();
+        let cached =
+            preview_organization_cached(root.path(), &rules, &options, &mut cache).unwrap();
 
         assert_eq!(uncached.scanned_files, cached.scanned_files);
         assert_eq!(uncached.ignored_files, cached.ignored_files);
@@ -252,15 +308,42 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        let first = preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        let first = preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
         assert_eq!(first.operations.len(), 1);
-        assert_eq!(cache.stats(), ScanCacheStats { reused_files: 0, rescanned_files: 1, revalidated_time_sensitive_files: 0, cached_entries: 1 });
+        assert_eq!(
+            cache.stats(),
+            ScanCacheStats {
+                reused_files: 0,
+                rescanned_files: 1,
+                revalidated_time_sensitive_files: 0,
+                cached_entries: 1
+            }
+        );
 
-        let second = preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        let second =
+            preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+                .unwrap();
         assert_eq!(second.operations.len(), 1);
         assert_eq!(first.operations[0].source, second.operations[0].source);
-        assert_eq!(first.operations[0].destination, second.operations[0].destination);
-        assert_eq!(cache.stats(), ScanCacheStats { reused_files: 1, rescanned_files: 0, revalidated_time_sensitive_files: 0, cached_entries: 1 });
+        assert_eq!(
+            first.operations[0].destination,
+            second.operations[0].destination
+        );
+        assert_eq!(
+            cache.stats(),
+            ScanCacheStats {
+                reused_files: 1,
+                rescanned_files: 0,
+                revalidated_time_sensitive_files: 0,
+                cached_entries: 1
+            }
+        );
     }
 
     #[test]
@@ -270,12 +353,20 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        let first = preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        let first = preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
         let occupied = first.operations[0].destination.clone();
         std::fs::create_dir_all(occupied.parent().unwrap()).unwrap();
         std::fs::write(&occupied, b"existing destination").unwrap();
 
-        let second = preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        let second =
+            preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+                .unwrap();
         assert_eq!(cache.stats().reused_files, 1);
         assert_ne!(second.operations[0].destination, occupied);
         assert!(!second.operations[0].destination.exists());
@@ -293,9 +384,22 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        let preview = preview_organization_cached(root.path(), &[rule], &ScanOptions { recursive: true, max_depth: Some(3), ..ScanOptions::default() }, &mut cache).unwrap();
+        let preview = preview_organization_cached(
+            root.path(),
+            &[rule],
+            &ScanOptions {
+                recursive: true,
+                max_depth: Some(3),
+                ..ScanOptions::default()
+            },
+            &mut cache,
+        )
+        .unwrap();
         assert_eq!(preview.operations.len(), 2);
-        assert_ne!(preview.operations[0].destination, preview.operations[1].destination);
+        assert_ne!(
+            preview.operations[0].destination,
+            preview.operations[1].destination
+        );
     }
 
     #[test]
@@ -304,12 +408,28 @@ mod tests {
         std::fs::write(root.path().join("note.txt"), b"hello").unwrap();
         let mut cache = ScanCache::default();
 
-        preview_organization_cached(root.path(), &[extension_rule("Text", "Text")], &ScanOptions::default(), &mut cache).unwrap();
-        let second = preview_organization_cached(root.path(), &[extension_rule("Docs", "Documents")], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(
+            root.path(),
+            &[extension_rule("Text", "Text")],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
+        let second = preview_organization_cached(
+            root.path(),
+            &[extension_rule("Docs", "Documents")],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
 
         assert_eq!(cache.stats().reused_files, 0);
         assert_eq!(cache.stats().rescanned_files, 1);
-        assert!(second.operations[0].destination.ends_with(Path::new("Documents").join("note.txt")));
+        assert!(
+            second.operations[0]
+                .destination
+                .ends_with(Path::new("Documents").join("note.txt"))
+        );
     }
 
     #[test]
@@ -320,9 +440,16 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
         std::fs::write(&path, b"hello world with a different size").unwrap();
-        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+            .unwrap();
 
         assert_eq!(cache.stats().reused_files, 0);
         assert_eq!(cache.stats().rescanned_files, 1);
@@ -338,10 +465,17 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
         assert_eq!(cache.stats().cached_entries, 2);
         std::fs::remove_file(second).unwrap();
-        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+            .unwrap();
 
         assert_eq!(cache.stats().cached_entries, 1);
         assert_eq!(cache.stats().reused_files, 1);
@@ -354,9 +488,16 @@ mod tests {
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
 
-        preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
         cache.clear();
-        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+            .unwrap();
 
         assert_eq!(cache.stats().reused_files, 0);
         assert_eq!(cache.stats().rescanned_files, 1);
@@ -372,12 +513,21 @@ mod tests {
             enabled: true,
             match_all: true,
             criteria: vec![RuleCriterion::ModifiedOlderThanDays { days: 0 }],
-            action: RuleAction::MoveTo { subdirectory: "Older".into() },
+            action: RuleAction::MoveTo {
+                subdirectory: "Older".into(),
+            },
         };
         let mut cache = ScanCache::default();
 
-        preview_organization_cached(root.path(), &[rule.clone()], &ScanOptions::default(), &mut cache).unwrap();
-        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache).unwrap();
+        preview_organization_cached(
+            root.path(),
+            &[rule.clone()],
+            &ScanOptions::default(),
+            &mut cache,
+        )
+        .unwrap();
+        preview_organization_cached(root.path(), &[rule], &ScanOptions::default(), &mut cache)
+            .unwrap();
 
         assert_eq!(cache.stats().reused_files, 1);
         assert_eq!(cache.stats().revalidated_time_sensitive_files, 1);
@@ -397,11 +547,22 @@ mod tests {
 
         let rule = extension_rule("Text", "Text");
         let mut cache = ScanCache::default();
-        let options = ScanOptions { recursive: true, follow_links: true, max_depth: Some(5), ..ScanOptions::default() };
-        let preview = preview_organization_cached(root.path(), &[rule], &options, &mut cache).unwrap();
+        let options = ScanOptions {
+            recursive: true,
+            follow_links: true,
+            max_depth: Some(5),
+            ..ScanOptions::default()
+        };
+        let preview =
+            preview_organization_cached(root.path(), &[rule], &options, &mut cache).unwrap();
 
         assert!(preview.operations.is_empty());
         assert_eq!(preview.scanned_files, 0);
-        assert!(!preview.recoverable_errors.iter().any(|error| error.contains("secret.txt")));
+        assert!(
+            !preview
+                .recoverable_errors
+                .iter()
+                .any(|error| error.contains("secret.txt"))
+        );
     }
 }
