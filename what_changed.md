@@ -1,72 +1,59 @@
 # SortSmith — Work Handoff
 
-## Current active workstream: v0.1.8 maintenance release
+## Current active workstream: v0.1.9 maintenance release
 
-- Release branch: `release/0.1.8`
-- Base: `release/0.1.7`
-- Target version: `0.1.8`
+- Release branch: `release/0.1.9`
+- Base: `release/0.1.8`
+- Target version: `0.1.9`
 - Default branch: `main`
-- Main version line: `0.3.0`
+- Main version line: `0.3.x`
 - Repository: `https://github.com/sanskarIN/sortsmith`
 - License: Apache-2.0
-- Commit identity requested for project work: `Sanskar <sanskarin@outlook.in>`
+- Commit identity: `Sanskar <sanskarin@outlook.in>`
 
-## v0.1.8 implementation and release-engineering audit
+## v0.1.9 scope
 
-### Version synchronization
+v0.1.9 is intentionally a focused 0.1.x maintenance release. It is based on `release/0.1.8` and does not backport newer 0.3.x feature-development work from `main`.
 
-The v0.1.8 maintenance branch synchronizes the release version across:
+The release synchronizes the application version across:
 
 - `Cargo.toml`
 - `apps/desktop/package.json`
 - `apps/desktop/src-tauri/tauri.conf.json`
 
-This keeps the Rust workspace, desktop frontend, and Tauri bundle aligned for the release-version verification gate and packaging metadata.
+The release also adds a dedicated release note and changelog entry.
 
-### Documentation accuracy
+## Safety baseline retained
 
-Updated `README.md` so the project no longer describes the 0.1.x line as merely a 0.1.0 implementation baseline. It now identifies v0.1.8 preparation and explicitly separates the maintenance branch from the 0.3.x `main` development line.
+The v0.1.8 baseline remains intact, including:
 
-Added `RELEASE_NOTES_v0.1.8.md` with the release scope, compatibility statement, validation commands, metadata, and publication gate.
+- External symbolic-link containment during recursive scans.
+- Collision-safe no-overwrite moves.
+- Durable journal checkpoints.
+- Safe undo path validation.
+- Portable filename validation.
+- Deterministic duplicate-detection output.
 
-Updated `CHANGELOG.md` with the v0.1.8 maintenance entry.
+No intentional breaking public API change is introduced by the v0.1.9 maintenance work.
 
-### Scope control
-
-The v0.1.8 release intentionally remains a small 0.1.x maintenance release. No 0.3.x scan-cache, automation, or other feature-development work is backported into this branch.
-
-## v0.1.7 baseline preserved
-
-The preceding v0.1.7 branch introduced deterministic ordering for files inside duplicate groups. That implementation remains unchanged in v0.1.8.
-
-Existing 0.1.6 filesystem safety hardening remains unchanged as well, including external symbolic-link containment, collision-safe no-overwrite moves, durable journal checkpoints, and safer undo behavior.
-
-## v0.1.8 commit sequence
+## v0.1.9 commit sequence
 
 The release branch currently contains focused commits for:
 
-1. `chore(release): bump workspace version to 0.1.8`
-2. `chore(desktop): sync package version to 0.1.8`
-3. `chore(tauri): sync application version to 0.1.8`
-4. `docs(changelog): add v0.1.8 maintenance release entry`
-5. `docs(release): add v0.1.8 release notes`
-6. `docs(readme): clarify v0.1.8 maintenance release status`
-7. This handoff update.
+1. `chore(release): bump workspace version to 0.1.9`
+2. `chore(release): synchronize desktop package version to 0.1.9`
+3. `chore(release): synchronize tauri version to 0.1.9`
+4. `docs(release): add v0.1.9 release notes`
+5. `docs(changelog): restore complete changelog with v0.1.9 entry`
 
-All project commits use the requested identity `Sanskar <sanskarin@outlook.in>` through the connected GitHub integration.
+All project commits use `Sanskar <sanskarin@outlook.in>`.
 
-## Verification status
+## Verification gate
 
-Repository-side preparation is complete for the current v0.1.8 scope. The GitHub Actions CI run triggered by the latest branch commit is currently the authoritative automated validation path.
-
-Local Rust, Node.js, Tauri, installer, and cross-platform execution has not been claimed as passed in this environment. No successful test result is fabricated.
-
-Before publication, the following must pass from `release/0.1.8`:
+The v0.1.9 tag must not be published until the dedicated branch passes:
 
 ```bash
-git checkout release/0.1.8
-git pull --ff-only origin release/0.1.8
-node scripts/verify-release-version.mjs v0.1.8
+node scripts/verify-release-version.mjs v0.1.9
 cargo fmt --all -- --check
 cargo check --workspace
 cargo test --workspace
@@ -82,33 +69,31 @@ npm run build
 npm run tauri build
 ```
 
-The production installers should additionally be smoke-tested on supported Windows, macOS, and Linux environments before publication.
+The supported desktop installers should additionally be smoke-tested on Windows, macOS, and Linux before production publication.
 
-## v0.1.8 publication procedure
+## Publication procedure
 
-After every validation gate is green:
+After every automated validation gate is green and installer smoke tests are complete:
 
 ```bash
-git checkout release/0.1.8
-git pull --ff-only origin release/0.1.8
-node scripts/verify-release-version.mjs v0.1.8
+git checkout release/0.1.9
+git pull --ff-only origin release/0.1.9
+node scripts/verify-release-version.mjs v0.1.9
 git diff --check
 git status --short
-git tag -a v0.1.8 -m "SortSmith v0.1.8"
-git push origin v0.1.8
+git tag -a v0.1.9 -m "SortSmith v0.1.9"
+git push origin v0.1.9
 ```
 
-The repository's tag-triggered workflow should then prepare the release artifacts according to the configured release workflow. Review the generated draft and artifacts before publishing.
+Recommended metadata:
 
-Recommended release metadata:
-
-- Tag: `v0.1.8`
-- Target: `release/0.1.8`
-- Title: `SortSmith v0.1.8 — Maintenance Release`
+- Tag: `v0.1.9`
+- Target: `release/0.1.9`
+- Title: `SortSmith v0.1.9 — Maintenance Release`
 - Pre-release: disabled
 - Latest: disabled
-- Body: `RELEASE_NOTES_v0.1.8.md`
+- Body: `RELEASE_NOTES_v0.1.9.md`
 
-## Release status
+## Current status
 
-As of this handoff, the `release/0.1.8` branch is prepared but the `v0.1.8` Git tag has not been published. Publication remains gated on green CI and the required installer smoke tests.
+The v0.1.9 release branch is prepared, but it is not yet declared production-ready. Automated CI validation is still the release gate. No green result is being fabricated, and no tag should be published until the complete validation path succeeds.
