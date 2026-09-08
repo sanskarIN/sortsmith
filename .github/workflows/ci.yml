@@ -19,17 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        with: { components: rustfmt, clippy }
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy core
-        # These lints are style-only for the existing safety/IO control flow.
-        # Keep warnings strict while avoiding a stable-toolchain-only release blocker.
         run: cargo clippy -p sortsmith-core --all-targets -- -D warnings -A clippy::collapsible_if -A clippy::unnecessary_fold -A clippy::needless_as_bytes
       - name: Test core
         run: cargo test -p sortsmith-core
@@ -38,12 +35,11 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+        with: { components: clippy }
       - name: Install Tauri system dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Check desktop host
@@ -60,14 +56,13 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Upgrade npm
-        run: npm install --global npm@11.6.0
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: Use repository-pinned npm
+        run: npm install --global npm@10.9.8
       - name: Install frontend dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Typecheck
