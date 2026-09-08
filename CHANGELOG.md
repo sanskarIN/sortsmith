@@ -90,3 +90,28 @@ Patch release focused on safe recursive preview behavior when symbolic links are
 - External symlink targets are reported as recoverable preview errors.
 
 ## [0.1.3] - 2026-09-03
+
+Patch release focused on deterministic preview planning and collision safety.
+
+### Fixed
+- Preview planning reserves destinations already assigned to earlier operations in the same preview.
+- Multiple files with the same filename in different source directories receive distinct planned destinations.
+
+## [0.1.2] - 2026-09-03
+
+Patch release focused on journal durability and defense-in-depth for undo operations.
+
+### Fixed
+- Journal snapshots can replace existing journal files on platforms where `rename` does not overwrite the target.
+- Core undo validates recorded journal paths against the journal root before mutation.
+
+## [0.1.1] - 2026-09-03
+
+Patch release focused on Unicode-safe rule validation and release metadata consistency.
+
+### Fixed
+- Rule value and filename-regex limits count Unicode characters rather than UTF-8 bytes.
+
+## [0.1.0] - 2026-08-21
+
+Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
