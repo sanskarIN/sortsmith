@@ -6,6 +6,18 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development continues on the next feature line.
 
+## [0.1.9] - 2026-09-08
+
+Stable maintenance release focused on release metadata integrity and preserving the established 0.1.x safety boundary.
+
+### Fixed
+- Synchronized the Rust workspace, desktop package, and Tauri configuration at `0.1.9` on the dedicated maintenance branch.
+- Preserved the v0.1.8 filesystem-safety baseline without pulling 0.3.x feature-development work into the patch line.
+
+### Release Engineering
+- Created the dedicated `release/0.1.9` branch from `release/0.1.8`.
+- Added complete v0.1.9 release notes and a publication validation gate.
+
 ## [0.1.8] - 2026-09-05
 
 Stable maintenance release focused on release metadata integrity and documentation accuracy after v0.1.7.
@@ -78,28 +90,3 @@ Patch release focused on safe recursive preview behavior when symbolic links are
 - External symlink targets are reported as recoverable preview errors.
 
 ## [0.1.3] - 2026-09-03
-
-Patch release focused on deterministic preview planning and collision safety.
-
-### Fixed
-- Preview planning reserves destinations already assigned to earlier operations in the same preview.
-- Multiple files with the same filename in different source directories receive distinct planned destinations.
-
-## [0.1.2] - 2026-09-03
-
-Patch release focused on journal durability and defense-in-depth for undo operations.
-
-### Fixed
-- Journal snapshots can replace existing journal files on platforms where `rename` does not overwrite the target.
-- Core undo validates recorded journal paths against the journal root before mutation.
-
-## [0.1.1] - 2026-09-03
-
-Patch release focused on Unicode-safe rule validation and release metadata consistency.
-
-### Fixed
-- Rule value and filename-regex limits count Unicode characters rather than UTF-8 bytes.
-
-## [0.1.0] - 2026-08-21
-
-Initial development baseline. The release tag must only be published after cross-platform CI and installer verification are green.
