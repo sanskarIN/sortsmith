@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::error::io;
 use crate::models::OperationJournal;
-use crate::Result;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -36,10 +36,12 @@ fn normalize_journal_paths(journal: &OperationJournal) -> Result<OperationJourna
     let entries = journal
         .entries
         .iter()
-        .map(|entry| crate::models::JournalEntry {
-            operation_id: entry.operation_id,
-            from: make_absolute(&entry.from)?,
-            to: make_absolute(&entry.to)?,
+        .map(|entry| {
+            Ok(crate::models::JournalEntry {
+                operation_id: entry.operation_id,
+                from: make_absolute(&entry.from)?,
+                to: make_absolute(&entry.to)?,
+            })
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -55,7 +57,9 @@ fn make_absolute(path: &Path) -> Result<PathBuf> {
     if path.is_absolute() {
         Ok(path.to_path_buf())
     } else {
-        std::env::current_dir().map(|dir| dir.join(path)).map_err(|e| io(path, e))
+        std::env::current_dir()
+            .map(|dir| dir.join(path))
+            .map_err(|e| io(path, e))
     }
 }
 
@@ -75,7 +79,10 @@ fn replace_journal_target(temp: &Path, target: &Path) -> Result<()> {
 
 #[cfg(unix)]
 fn sync_journal_directory(dir: &Path) -> Result<()> {
-    File::open(dir).map_err(|e| io(dir, e))?.sync_all().map_err(|e| io(dir, e))
+    File::open(dir)
+        .map_err(|e| io(dir, e))?
+        .sync_all()
+        .map_err(|e| io(dir, e))
 }
 
 #[cfg(not(unix))]

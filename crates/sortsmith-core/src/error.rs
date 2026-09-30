@@ -22,5 +22,8 @@ pub enum SortSmithError {
 }
 
 pub(crate) fn io(path: impl Into<PathBuf>, source: std::io::Error) -> SortSmithError {
-    SortSmithError::Io { path: path.into(), source }
+    SortSmithError::Io {
+        path: path.into(),
+        source,
+    }
 }

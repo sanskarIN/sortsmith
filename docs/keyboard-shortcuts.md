@@ -22,6 +22,10 @@ SortSmith keeps high-frequency organizer actions available from the keyboard whi
 
 Apply and undo shortcuts honor the same availability and confirmation rules as their visible buttons. A shortcut cannot bypass the configured confirmation-before-apply setting, and unavailable actions remain unavailable while SortSmith is busy or when no preview/journal exists.
 
-Shortcut handling intentionally does not intercept the application-level combinations while focus is inside a form control or content-editable element. This preserves ordinary editing commands such as undo inside a text field.
+Shortcut handling intentionally does not intercept application-level combinations while focus is inside a form control or content-editable element. This preserves ordinary editing commands such as undo inside a text field.
 
-The shortcut reference is also available in the running app by pressing `Shift+?` outside an editor.
+## Shortcut dialog focus
+
+Pressing `Shift+?` outside an editor opens a labelled modal reference and moves focus to its Close button. The dialog can be dismissed with the Close button, `Escape`, or an outside click. When it closes, SortSmith restores focus to the element that was active before the dialog opened so keyboard users can continue from the same point in the workflow.
+
+Platform release checks must verify these combinations do not conflict with desktop/window-manager shortcuts in supported environments. Any unavoidable platform-specific conflict should be documented before publishing the release.
