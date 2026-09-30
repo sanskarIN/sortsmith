@@ -38,6 +38,10 @@ pub fn preview_organization(
             return false;
         }
         options.follow_links && entry_resolves_outside_root(e, &canonical_root) != Some(true)
+        if options.follow_links {
+            return entry_resolves_outside_root(e, &canonical_root) != Some(true);
+        }
+        true
     }) {
         let entry = match item {
             Ok(v) => v,

@@ -26,6 +26,10 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
             }
             options.follow_links
                 && entry_resolves_outside_root(entry, &canonical_root) != Some(true)
+            if options.follow_links {
+                return entry_resolves_outside_root(entry, &canonical_root) != Some(true);
+            }
+            true
         })
     {
         let Ok(entry) = item else {
@@ -65,6 +69,7 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
         .filter(|(_, files)| files.len() > 1)
         .map(|((size, hash), mut files)| {
             files.sort();
+            DuplicateGroup { hash, size, files: files.into_iter().map(|path| DuplicateFile { path, size }).collect() }
             DuplicateGroup {
                 hash,
                 size,

@@ -4,12 +4,15 @@ use chrono::{DateTime, Duration, Utc};
 use sortsmith_core::{
     AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule,
     ScanOptions, execute_preview, find_duplicates, preview_organization, undo_journal,
+    ScanCache, ScanOptions, execute_preview, find_duplicates, preview_organization,
+    preview_organization_cached, undo_journal,
 };
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Component, Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
 
 const MAX_STATE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_OPERATION_LOG_BYTES: u64 = 5 * 1024 * 1024;
@@ -74,6 +77,7 @@ fn save_state(app: AppHandle, state: AppStateData) -> Result<(), String> {
 
 #[tauri::command]
 fn preview(
+    cache: State<'_, Mutex<ScanCache>>,
     root: String,
     rules: Vec<Rule>,
     recursive: bool,
@@ -87,11 +91,17 @@ fn preview(
         max_depth: Some(32),
     };
     preview_organization(&root, &rules, &options).map_err(|e| e.to_string())
+    match cache.lock() {
+        Ok(mut cache) => preview_organization_cached(&root, &rules, &options, &mut cache)
+            .map_err(|e| e.to_string()),
+        Err(_) => preview_organization(&root, &rules, &options).map_err(|e| e.to_string()),
+    }
 }
 
 #[tauri::command]
 fn execute(
     app: AppHandle,
+    cache: State<'_, Mutex<ScanCache>>,
     root: String,
     preview: PreviewResult,
 ) -> Result<ExecutionReport, String> {
@@ -103,6 +113,7 @@ fn execute(
             return Err("A planned operation escaped the selected root and was blocked.".into());
         }
     }
+    clear_preview_cache(&cache);
     let report =
         execute_preview(&root, &preview, &journals_dir(&app)?).map_err(|e| e.to_string())?;
     append_operation_log(
@@ -117,11 +128,17 @@ fn execute(
 
 #[tauri::command]
 fn undo(app: AppHandle, journal_id: String) -> Result<ExecutionReport, String> {
+fn undo(
+    app: AppHandle,
+    cache: State<'_, Mutex<ScanCache>>,
+    journal_id: String,
+) -> Result<ExecutionReport, String> {
     let id = uuid::Uuid::parse_str(&journal_id)
         .map_err(|_| "Invalid journal identifier.".to_string())?;
     let path = journals_dir(&app)?.join(format!("{id}.journal.json"));
     let journal = sortsmith_core::journal::load_journal(&path).map_err(|e| e.to_string())?;
     validate_journal_paths(&journal)?;
+    clear_preview_cache(&cache);
     let report = undo_journal(&path).map_err(|e| e.to_string())?;
     append_operation_log(
         &app,
@@ -226,7 +243,10 @@ fn import_state(path: String) -> Result<AppStateData, String> {
 }
 
 #[tauri::command]
-fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
+fn run_due_watches(
+    app: AppHandle,
+    cache: State<'_, Mutex<ScanCache>>,
+) -> Result<Vec<String>, String> {
     let mut state = load_state(app.clone())?;
     let mut messages = Vec::new();
     let preset_map = state
@@ -263,6 +283,7 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
             follow_links: false,
             max_depth: Some(32),
         };
+        clear_preview_cache(&cache);
         match preview_organization(&root, &rules, &options)
             .and_then(|p| execute_preview(&root, &p, &journals))
         {
@@ -287,6 +308,12 @@ fn run_due_watches(app: AppHandle) -> Result<Vec<String>, String> {
     state.recent_journal_ids.truncate(20);
     save_state(app, state)?;
     Ok(messages)
+}
+
+fn clear_preview_cache(cache: &State<'_, Mutex<ScanCache>>) {
+    if let Ok(mut cache) = cache.lock() {
+        cache.clear();
+    }
 }
 
 fn validate_state_data(state: &AppStateData) -> Result<(), String> {
@@ -523,6 +550,16 @@ fn validated_json_export_path(raw: &str) -> Result<PathBuf, String> {
     if !parent.is_dir() {
         return Err("The selected export directory is invalid.".into());
     }
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "The selected export path has no parent directory.".to_string())?;
+    let parent = parent
+        .canonicalize()
+        .map_err(|_| "The selected export directory is unavailable.".to_string())?;
+    if !parent.is_dir() {
+        return Err("The selected export directory is invalid.".into());
+    }
     let filename = path
         .file_name()
         .ok_or_else(|| "The selected export filename is invalid.".to_string())?;
@@ -634,6 +671,7 @@ mod tests {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Mutex::new(ScanCache::default()))
         .invoke_handler(tauri::generate_handler![
             load_state,
             save_state,

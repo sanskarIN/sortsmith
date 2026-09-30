@@ -1,30 +1,91 @@
 # Testing
 
-The core crate carries unit/integration-style coverage for rule validation, path safety, collision handling, portable rename output, dry-run/apply/undo, journal persistence, hidden-folder behavior, and duplicate detection. Property tests additionally exercise rule serialization round-trips, traversal rejection, generated portable filenames, and rename-template extension preservation across many generated inputs. The Tauri desktop host has focused tests for bounded operation-log rotation, and the frontend tests deterministic formatting/timing utilities, saved-preset helpers, and keyboard shortcut resolution with Vitest.
+The core crate carries unit/integration-style coverage for rule validation, path safety, collision handling, portable rename output, dry-run/apply/undo, journal persistence, hidden-folder behavior, duplicate detection, bundled-preset validity/stable identifiers, and incremental preview-cache invalidation. Property tests additionally exercise rule serialization round-trips, traversal rejection, generated portable filenames, and rename-template extension preservation across many generated inputs.
 
-CI executes Rust formatting, core and desktop-host Clippy, core and desktop-host tests, TypeScript checks, Vitest, and the frontend production build. Core Clippy uses `--all-targets`, so benchmark targets are compiled as part of CI even though timing-sensitive Criterion measurements are intentionally not run on shared CI runners. CodeQL scans both JavaScript/TypeScript and Rust. Desktop packaging is exercised in the release workflow across Windows, macOS, and Linux.
+The incremental preview-cache tests specifically cover unchanged-file reuse, rule-scope invalidation, changed-file rescanning, deleted-entry pruning, explicit cache clearing, and mandatory revalidation for time-sensitive `ModifiedOlderThanDays` criteria. Cache hits never bypass destination collision resolution.
+
+The Tauri desktop host has focused tests for bounded operation-log rotation. The frontend tests deterministic formatting/timing utilities, saved-preset helpers, bundled-preset compatibility migration, watched-folder reference remapping, preset-capacity behavior, and keyboard shortcut resolution with Vitest.
+
+CI executes Rust formatting, core and desktop-host Clippy, core and desktop-host tests, TypeScript checks, Vitest, the frontend production build, and release-version synchronization. Core Clippy uses `--all-targets`, so benchmark targets are compiled as part of CI even though timing-sensitive Criterion measurements are intentionally not run on shared CI runners. CodeQL scans both JavaScript/TypeScript and Rust.
+
+The tag-driven release workflow additionally requires committed/aligned package-manager lockfiles, validates Cargo resolution with `cargo fetch --locked`, uses `npm ci`, and packages on Windows, macOS, and Linux.
 
 When fixing a bug, first capture the failure in a regression test when feasible. Filesystem tests and benchmarks must use isolated temporary locations and must never access personal folders. Tests must not depend on production credentials, personal data, or network services.
 
-## Required release checks
+## Development quality checks
+
+Until the two release lockfiles are generated and committed, normal development checks may use package-manager resolution:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 cargo bench -p sortsmith-core --bench planning
+node scripts/verify-release-version.mjs
 cd apps/desktop
 npm install --no-audit --no-fund
+npm run typecheck
+npm test
+npm run build
+```
+
+## 0.3 incremental-cache validation
+
+The `planning` Criterion target now contains both the existing uncached `organization_planning` group and a warmed `organization_planning_warm_cache` group. Run both on the same machine and toolchain before claiming a cache speedup:
+
+```bash
+cargo test -p sortsmith-core scan_cache
+cargo bench -p sortsmith-core --bench planning -- organization_planning
+```
+
+Record the CPU, storage type, operating system, Rust version, build profile, file-count fixture, uncached median, warm-cache median, and variance. Do not establish a performance budget from shared CI timings.
+
+Correctness verification must confirm all of the following on disposable folders:
+
+- the first cached preview produces the same source/destination/rule decisions as the uncached planner;
+- a second unchanged preview can reuse cached file descriptions and rule decisions;
+- changing any rule, selected root, recursive/hidden option, file size, file modified time, or file path invalidates the relevant cached decision;
+- deleting files removes their entries from the cache;
+- time-sensitive modified-age rules are re-evaluated even when file metadata is otherwise reusable;
+- collision-safe destination selection is recalculated on every preview rather than cached;
+- apply and undo clear the interactive preview cache before filesystem mutation;
+- watched-folder execution clears the interactive cache before applying background-in-app changes;
+- a poisoned/unavailable cache falls back to the existing uncached planner instead of blocking organization.
+
+The cache is currently in-memory only. Restarting SortSmith starts with an empty cache, so no cache migration or persistent-cache corruption scenario exists in this phase.
+
+## Required 0.2.0 release checks
+
+After `Cargo.lock` and `apps/desktop/package-lock.json` have been generated by their package managers, reviewed, and committed:
+
+```bash
+node scripts/verify-release-version.mjs v0.2.0
+node scripts/verify-release-lockfiles.mjs
+cargo fetch --locked
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace
+cargo bench -p sortsmith-core --bench planning
+cd apps/desktop
+npm ci --no-audit --no-fund
 npm run typecheck
 npm test
 npm run build
 npm run tauri build
 ```
 
-Before a release tag, also run the repository metadata guard from the repository root:
+## Manual platform checks
 
-```bash
-node scripts/verify-release-version.mjs v0.1.0
-```
+Automated source tests do not replace desktop integration verification. Before publishing `v0.2.0`, exercise at least:
 
-A release is not considered verified until required GitHub checks are green and clean-machine installer smoke tests have passed for each distributed platform.
+- native folder picker and settings import/export dialogs;
+- dry-run → apply → selective/latest undo on disposable fixtures;
+- watched-folder preset selection and legacy-preset migration behavior;
+- bundled preset loading and custom preset create/edit/delete protection;
+- keyboard shortcuts and conflicts with text editing;
+- shortcut-dialog focus entry, Escape dismissal, outside-click dismissal, and focus restoration;
+- 200% zoom, light/dark/system theme contrast, reduced motion, labels, and status announcements;
+- permission-denied folders, symlink boundaries, Unicode paths, and platform-supported long paths;
+- installer install, first launch, upgrade path, and uninstall on each distributed platform.
+
+A release is not considered verified until required GitHub checks are green and clean-machine installer smoke tests have passed for every distributed platform.

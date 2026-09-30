@@ -14,9 +14,11 @@ Saved settings and imported/exported settings files are validated and bounded to
 
 The structured operation log records only timestamps, event names, journal identifiers, completed operation counts, and error counts. It does not record file contents or file paths. The active log rotates at 5 MiB and keeps at most one previous log file. SortSmith refuses to append through a symlink or non-file log target.
 
+Bundled and user-defined presets are local rule metadata. Version 0.2 may normalize the legacy `Everyday tidy` preset identifier and watched-folder references to a stable bundled identifier; this migration remains local and does not transmit preset or path data.
+
 ## Telemetry and network
 
-Version 0.1.0 includes no telemetry, analytics, advertising, account system, or cloud synchronization. Links in the About page open external websites only when the user activates them.
+Version 0.2.0 includes no telemetry, analytics, advertising, account system, or cloud synchronization. Links in the About page open external websites only when the user activates them.
 
 ## Local deletion and backups
 

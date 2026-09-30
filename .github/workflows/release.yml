@@ -20,21 +20,25 @@ jobs:
         platform: [ubuntu-22.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: Verify release version metadata
         run: node scripts/verify-release-version.mjs "${{ github.ref_name }}"
+      - name: Verify committed dependency lockfiles
+        run: node scripts/verify-release-lockfiles.mjs
+      - name: Validate Rust lockfile
+        run: cargo fetch --locked
       - name: Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Install frontend dependencies
+      - name: Install frontend dependencies from lockfile
         working-directory: apps/desktop
-        run: npm install --no-audit --no-fund
-      - uses: tauri-apps/tauri-action@v0
+        run: npm ci --no-audit --no-fund
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
