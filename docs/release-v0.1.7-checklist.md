@@ -2,11 +2,18 @@
 
 This checklist covers publication of the 0.1.7 maintenance release from `release/0.1.7`.
 
+## Source
 ## Source and version
 
 - [ ] Confirm `release/0.1.7` is based on `release/0.1.6`.
 - [ ] Confirm the deterministic duplicate-result fix is present.
 - [ ] Confirm no 0.3.0 feature work has been backported into the maintenance branch.
+
+## Version integrity
+
+- [ ] `Cargo.toml` reports `0.1.7`.
+- [ ] `apps/desktop/package.json` reports `0.1.7`.
+- [ ] `apps/desktop/src-tauri/tauri.conf.json` reports `0.1.7`.
 - [ ] Confirm `Cargo.toml`, `apps/desktop/package.json`, and `apps/desktop/src-tauri/tauri.conf.json` report `0.1.7` on the release branch.
 - [ ] Run `node scripts/verify-release-version.mjs v0.1.7`.
 
@@ -35,6 +42,7 @@ This checklist covers publication of the 0.1.7 maintenance release from `release
 - [ ] Validate macOS build/package.
 - [ ] Confirm generated application metadata is version `0.1.7`.
 
+## GitHub release
 ## GitHub publication
 
 - [ ] Create/push tag `v0.1.7` from `release/0.1.7` only.
