@@ -3,6 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 use sortsmith_core::{
     AppStateData, DuplicateGroup, ExecutionReport, OperationJournal, PreviewResult, Rule,
+    ScanOptions, execute_preview, find_duplicates, preview_organization, undo_journal,
     ScanCache, ScanOptions, execute_preview, find_duplicates, preview_organization,
     preview_organization_cached, undo_journal,
 };
@@ -89,6 +90,7 @@ fn preview(
         follow_links: false,
         max_depth: Some(32),
     };
+    preview_organization(&root, &rules, &options).map_err(|e| e.to_string())
     match cache.lock() {
         Ok(mut cache) => preview_organization_cached(&root, &rules, &options, &mut cache)
             .map_err(|e| e.to_string()),
@@ -125,6 +127,7 @@ fn execute(
 }
 
 #[tauri::command]
+fn undo(app: AppHandle, journal_id: String) -> Result<ExecutionReport, String> {
 fn undo(
     app: AppHandle,
     cache: State<'_, Mutex<ScanCache>>,
@@ -537,6 +540,16 @@ fn validated_json_export_path(raw: &str) -> Result<PathBuf, String> {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("The export target must be a regular JSON file.".into());
         }
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "The selected export path has no parent directory.".to_string())?;
+    let parent = parent
+        .canonicalize()
+        .map_err(|_| "The selected export directory is unavailable.".to_string())?;
+    if !parent.is_dir() {
+        return Err("The selected export directory is invalid.".into());
+    }
     }
     let parent = path
         .parent()

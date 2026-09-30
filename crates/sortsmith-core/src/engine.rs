@@ -37,6 +37,7 @@ pub fn preview_organization(
         if !options.include_hidden && is_hidden(e, root) {
             return false;
         }
+        options.follow_links && entry_resolves_outside_root(e, &canonical_root) != Some(true)
         if options.follow_links {
             return entry_resolves_outside_root(e, &canonical_root) != Some(true);
         }

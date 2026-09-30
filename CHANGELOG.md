@@ -6,6 +6,32 @@ All notable changes follow Keep a Changelog principles and Semantic Versioning.
 
 Development line: `0.3.0` on `develop/0.3.0`. This work is intentionally isolated from the `0.2.0` release candidate on `main` until the 0.2 release gate is resolved.
 
+## [0.1.9] - 2026-09-08
+
+Stable maintenance release focused on release metadata integrity and preserving the established 0.1.x safety boundary.
+
+### Fixed
+- Synchronized the Rust workspace, desktop package, and Tauri configuration at `0.1.9` on the dedicated maintenance branch.
+- Preserved the v0.1.8 filesystem-safety baseline without pulling 0.3.x feature-development work into the patch line.
+
+### Release Engineering
+- Created the dedicated `release/0.1.9` branch from `release/0.1.8`.
+- Added complete v0.1.9 release notes and a publication validation gate.
+
+## [0.1.8] - 2026-09-05
+
+Stable maintenance release focused on release metadata integrity and documentation accuracy after v0.1.7.
+
+### Fixed
+- Synchronized the Rust workspace, desktop package, and Tauri configuration at `0.1.8` on the dedicated maintenance branch.
+- Removed stale release-status ambiguity from the v0.1.x handoff documentation.
+- Updated the project handoff and README release-status language so the maintenance branch is clearly distinguished from the `main` 0.3.x development line.
+
+### Release Engineering
+- Created the dedicated `release/0.1.8` branch from the v0.1.7 release branch.
+- Added a complete v0.1.8 release note and validation checklist.
+- Kept the release scoped to the 0.1.x maintenance line; no 0.3.x feature work is backported.
+
 ## [0.1.7] - 2026-09-04
 
 Stable maintenance release focused on deterministic duplicate-detection results without changing duplicate matching or deletion behavior.

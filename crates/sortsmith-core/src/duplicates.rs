@@ -24,6 +24,8 @@ pub fn find_duplicates(root: &Path, options: &ScanOptions) -> Result<Vec<Duplica
             if !options.include_hidden && is_hidden(entry, root) {
                 return false;
             }
+            options.follow_links
+                && entry_resolves_outside_root(entry, &canonical_root) != Some(true)
             if options.follow_links {
                 return entry_resolves_outside_root(entry, &canonical_root) != Some(true);
             }

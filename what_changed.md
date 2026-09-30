@@ -1,75 +1,59 @@
 # SortSmith — Work Handoff
 
-## Current active workstream: v0.1.7 stable release
+## Current active workstream: v0.1.9 maintenance release
 
-- Release branch: `release/0.1.7`
-- Base: `release/0.1.6`
-- Target version: `0.1.7`
+- Release branch: `release/0.1.9`
+- Base: `release/0.1.8`
+- Target version: `0.1.9`
 - Default branch: `main`
-- Main version line: `0.3.0`
+- Main version line: `0.3.x`
 - Repository: `https://github.com/sanskarIN/sortsmith`
 - License: Apache-2.0
-- Commit identity requested for project work: `Sanskar <sanskarin@outlook.in>`
+- Commit identity: `Sanskar <sanskarin@outlook.in>`
 
-## v0.1.7 implementation and bug-fix audit
+## v0.1.9 scope
 
-### Deterministic duplicate results
+v0.1.9 is intentionally a focused 0.1.x maintenance release. It is based on `release/0.1.8` and does not backport newer 0.3.x feature-development work from `main`.
 
-`crates/sortsmith-core/src/duplicates.rs` now sorts the paths inside each duplicate group before returning the result. Duplicate groups already have stable size/hash ordering; this change also makes the member ordering stable.
-
-This prevents filesystem traversal order and Rayon hashing completion order from leaking into the returned API result. Repeated scans of the same unchanged directory therefore present duplicate members in the same path order.
-
-### Regression coverage
-
-Added `duplicate_files_are_sorted_by_path`, which creates two equal-content files in reverse lexical creation order and verifies that the returned duplicate group is ordered lexically by path.
-
-Existing coverage remains for equal-content detection without deletion, hidden-directory pruning, and external symbolic-link directories when link following is enabled.
-
-### Maintenance-line scope correction
-
-The in-memory `scan_cache.rs` work belongs to the later 0.3.0 feature-development line and was deliberately removed from `release/0.1.7`. This keeps the 0.1.x patch release focused on a small compatibility-safe maintenance fix instead of backporting an entire later feature.
-
-The corresponding cached-preview hardening remains on `main`, where the 0.3.0 scan-cache feature lives.
-
-## v0.1.7 release engineering
-
-The dedicated `release/0.1.7` branch was created from `release/0.1.6` and contains eight commits ahead of the v0.1.6 source boundary, including implementation, version synchronization, documentation, and cleanup work.
-
-Version `0.1.7` is synchronized across:
+The release synchronizes the application version across:
 
 - `Cargo.toml`
 - `apps/desktop/package.json`
 - `apps/desktop/src-tauri/tauri.conf.json`
 
-Release support files are present:
+The release also adds a dedicated release note and changelog entry.
 
-- `CHANGELOG.md`
-- `RELEASE_NOTES_v0.1.7.md`
-- `docs/release-v0.1.7-checklist.md`
-- `what_changed.md`
+## Safety baseline retained
 
-## v0.1.6 implementation and bug-fix audit
+The v0.1.8 baseline remains intact, including:
 
-### Public API-level symlink traversal coverage
+- External symbolic-link containment during recursive scans.
+- Collision-safe no-overwrite moves.
+- Durable journal checkpoints.
+- Safe undo path validation.
+- Portable filename validation.
+- Deterministic duplicate-detection output.
 
-The v0.1.5 implementation prevents recursive traversal into symbolic-link directories whose resolved targets are outside the selected root when `follow_links` is enabled. v0.1.6 added a public integration test at `crates/sortsmith-core/tests/external_symlink_traversal.rs` covering this behavior through `preview_organization`.
+No intentional breaking public API change is introduced by the v0.1.9 maintenance work.
 
-### Windows filename portability hardening
+## v0.1.9 commit sequence
 
-`crates/sortsmith-core/src/safety.rs` rejects Unicode superscript aliases for numbered Windows device names such as `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²`, and `LPT³`.
+The release branch currently contains focused commits for:
 
-Reserved destination comparison is case-insensitive on Windows. Generated collision names are bounded to the portable 255-byte and 255-UTF-16-unit filename limits.
+1. `chore(release): bump workspace version to 0.1.9`
+2. `chore(release): synchronize desktop package version to 0.1.9`
+3. `chore(release): synchronize tauri version to 0.1.9`
+4. `docs(release): add v0.1.9 release notes`
+5. `docs(changelog): restore complete changelog with v0.1.9 entry`
 
-### Journal durability and path normalization
+All project commits use `Sanskar <sanskarin@outlook.in>`.
 
-Journal snapshots normalize relative root and entry paths to absolute paths and synchronize the journal directory after atomic replacement on Unix-like systems.
+## Verification gate
 
-### Crash recovery journal checkpoints
+The v0.1.9 tag must not be published until the dedicated branch passes:
 
-The execution engine saves the journal after each successfully completed move, reducing the amount of completed work that can be lost from a journal if a multi-file operation is interrupted.
-
-### No-overwrite move safety
-
+```bash
+node scripts/verify-release-version.mjs v0.1.9
 File moves and undo moves use a no-overwrite hard-link path with a `create_new` streamed-copy fallback instead of relying on an overwriting `rename` boundary. Execution retries collision-safe destinations when a destination becomes occupied after preview.
 
 ### Duplicate-scan root containment
@@ -166,35 +150,34 @@ npm test
 npm run build
 ```
 
-The duplicate-result determinism regression must pass as part of the core test suite. Full application packaging should be validated on Linux, Windows, and macOS.
+The supported desktop installers should additionally be smoke-tested on Windows, macOS, and Linux before production publication.
 
-## v0.1.7 publication procedure
+## Publication procedure
 
-After all validation gates pass:
+After every automated validation gate is green and installer smoke tests are complete:
 
 ```bash
-git checkout release/0.1.7
-git pull --ff-only origin release/0.1.7
-node scripts/verify-release-version.mjs v0.1.7
+git checkout release/0.1.9
+git pull --ff-only origin release/0.1.9
+node scripts/verify-release-version.mjs v0.1.9
 git diff --check
 git status --short
-git tag -a v0.1.7 -m "SortSmith v0.1.7"
-git push origin v0.1.7
+git tag -a v0.1.9 -m "SortSmith v0.1.9"
+git push origin v0.1.9
 ```
 
-The tag-triggered release workflow is configured to create a draft release. Review the generated Linux/Windows/macOS artifacts and draft release before publishing.
+Recommended metadata:
 
-Recommended release metadata:
-
-- Tag: `v0.1.7`
-- Target: `release/0.1.7`
-- Title: `SortSmith v0.1.7 — Patch Release`
+- Tag: `v0.1.9`
+- Target: `release/0.1.9`
+- Title: `SortSmith v0.1.9 — Maintenance Release`
 - Pre-release: disabled
 - Latest: disabled
-- Body: `RELEASE_NOTES_v0.1.7.md`
+- Body: `RELEASE_NOTES_v0.1.9.md`
 
-## Release status
+## Current status
 
+The v0.1.9 release branch is prepared, but it is not yet declared production-ready. Automated CI validation is still the release gate. No green result is being fabricated, and no tag should be published until the complete validation path succeeds.
 As of this handoff, `v0.1.7` has **not** been published. The release branch and release materials are prepared, but the tag and GitHub release must be created only after the validation gates pass.
 Filesystem behavior should additionally be reviewed for preview-only planning, reversible journals, collision-safe moves, and root containment when symlink following is enabled.
 

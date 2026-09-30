@@ -1,5 +1,6 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use sortsmith_core::{
+    Rule, RuleAction, RuleCriterion, ScanOptions, find_duplicates, preview_organization,
     Rule, RuleAction, RuleCriterion, ScanCache, ScanOptions, find_duplicates, preview_organization,
     preview_organization_cached,
 };
